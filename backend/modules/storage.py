@@ -212,3 +212,31 @@ class StorageModule:
                 self.is_saving = False
 
         threading.Thread(target=_write_task).start()
+    def get_recent_events(self, hours=24):
+        """获取最近 N 小时的跌倒记录"""
+        if self.db is None:
+            return []
+        
+        try:
+            # 计算截止时间戳
+            current_time = time.time()
+            start_time = current_time - (hours * 3600)
+            
+            # 从 history 集合中查询 (假设存储时字段为 timestamp)
+            # 注意：这里假设您的数据库中存储的时间戳是浮点数或兼容格式
+            # 如果您存的是字符串，可能需要调整查询方式
+            cursor = self.db.history.find({
+                "timestamp": {"$gte": start_time}
+            }).sort("timestamp", -1)
+            
+            events = []
+            for doc in cursor:
+                events.append({
+                    "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(doc.get("timestamp", 0))),
+                    "event_type": "Fall Detected", # 或者从 doc 获取具体类型
+                    "video_id": str(doc.get("video_file_id", "N/A"))
+                })
+            return events
+        except Exception as e:
+            print(f"[Storage] 查询历史记录失败: {e}")
+            return []

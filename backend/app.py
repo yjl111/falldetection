@@ -10,6 +10,7 @@ from flask import Flask, Response, jsonify, request, render_template
 from flask_cors import CORS
 from ultralytics import YOLO
 from werkzeug.utils import secure_filename
+from modules.reporter import AIReporter  # <--- 新增导入
 
 # 导入模块
 try:
@@ -57,7 +58,7 @@ auth_module = AuthModule(db_name=os.path.join(BASE_DIR, 'users.db'))
 storage = None
 if StorageModule:
     storage = StorageModule(save_dir=EVIDENCE_DIR, buffer_seconds=3, fps=30)
-
+reporter = AIReporter() # <--- 初始化模块
 # ================= 模块 1: 训练管理器 =================
 class TrainingManager:
     def __init__(self):
@@ -295,6 +296,25 @@ def get_table_data():
 @app.route('/api/alarm')
 def get_alarm_status():
     with lock: return jsonify({"is_alarm": video_state["is_alarm"]})
+
+@app.route('/api/report/generate', methods=['POST'])
+def generate_report():
+    """生成 AI 分析报告接口"""
+    if not storage:
+        return jsonify({"error": "存储模块未启用"}), 500
+    
+    # 1. 获取最近 24 小时数据
+    events = storage.get_recent_events(hours=24)
+    
+    # 2. 调用 AI 生成文本
+    report_content = reporter.generate_daily_report(events)
+    
+    # 3. 返回结果
+    return jsonify({
+        "success": True,
+        "event_count": len(events),
+        "report": report_content
+    })
 
 if __name__ == '__main__':
     print("系统启动成功！访问 http://localhost:5000")
