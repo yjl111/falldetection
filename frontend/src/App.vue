@@ -32,6 +32,15 @@
           <button @click="currentTab = 'replay'" :class="{active: currentTab==='replay'}">
             <span class="btn-icon">🎬</span> 历史回放
           </button>
+          <button @click="currentTab = 'statistics'" :class="{active: currentTab==='statistics'}">
+            <span class="btn-icon">📊</span> 统计分析
+          </button>
+          <button @click="currentTab = 'alarm'" :class="{active: currentTab==='alarm'}">
+            <span class="btn-icon">🔔</span> 报警管理
+          </button>
+          <button @click="currentTab = 'settings'" :class="{active: currentTab==='settings'}">
+            <span class="btn-icon">⚙️</span> 系统配置
+          </button>
         </div>
         <!-- 登出按钮 -->
         <button class="logout-btn" @click="handleLogout">退出 ➜</button>
@@ -53,6 +62,9 @@ import Register from './components/Register.vue';
 import DetectionDashboard from './components/DetectionDashboard.vue';
 import TrainingDashboard from './components/TrainingDashboard.vue';
 import VideoReplay from './components/VideoReplay.vue';
+import StatisticsDashboard from './components/StatisticsDashboard.vue';
+import AlarmManagement from './components/AlarmManagement.vue';
+import SystemSettings from './components/SystemSettings.vue';
 import { computed } from 'vue';
 
 const isLoggedIn = ref(false);
@@ -64,6 +76,9 @@ const activeComponent = computed(() => {
     case 'detect': return DetectionDashboard;
     case 'train': return TrainingDashboard;
     case 'replay': return VideoReplay;
+    case 'statistics': return StatisticsDashboard;
+    case 'alarm': return AlarmManagement;
+    case 'settings': return SystemSettings;
     default: return DetectionDashboard;
   }
 });

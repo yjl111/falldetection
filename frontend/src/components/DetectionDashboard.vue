@@ -1,39 +1,24 @@
 <template>
   <div class="gui-layout" @click="unlockAudio">
-    <audio ref="alarmAudio" src="https://www.soundjay.com/buttons/beep-01a.mp3" loop></audio>
+    <!-- 报警声音源 -->
+    <audio ref="alarmAudio" src="https://www.soundjay.com/misc/sounds/emergency-alarm-with-reverb-29431.mp3" loop></audio>
 
+    <!-- 报警遮罩层 -->
     <div class="alarm-overlay" v-if="isAlarm">
       <div class="alarm-banner">⚠️ 危险警报：检测到跌倒 ⚠️</div>
     </div>
 
-    <transition name="fade">
-      <div v-if="showReportModal" class="modal-overlay" @click.self="showReportModal = false">
-        <div class="modal-content glass-panel">
-          <div class="modal-header">
-            <h3>🤖 AI 智能安全简报</h3>
-            <button class="close-icon" @click="showReportModal = false">×</button>
-          </div>
-          <div class="report-body custom-scrollbar">
-            <pre>{{ aiReport }}</pre>
-          </div>
-          <div class="modal-footer">
-            <button class="neon-btn secondary" @click="showReportModal = false">关闭</button>
-            <button class="neon-btn" @click="generateReport" :disabled="reportLoading">
-              {{ reportLoading ? '分析中...' : '🔄 重新生成' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
     <aside class="sidebar glass-panel">
+      <!-- 1. Tasks -->
       <div class="panel-section">
         <h3><span class="deco">#</span> 任务选择</h3>
         <div class="radio-card">
           <label class="radio-item active"><span class="status-indicator glow"></span> 目标检测+姿态估计</label>
+          
         </div>
       </div>
 
+      <!-- 2. Models -->
       <div class="panel-section">
         <h3><span class="deco">#</span> 模型选择</h3>
         <div class="select-wrapper">
@@ -45,11 +30,13 @@
         </div>
       </div>
       
+      <!-- 3. Input Source -->
       <div class="panel-section">
         <div class="section-header">
           <h3><span class="deco">#</span> 输入源</h3>
         </div>
         <div class="action-grid">
+          <!-- 文件按钮 -->
           <button 
             class="cyber-btn" 
             :class="{ active: activeSource === 'file', 'is-loading': activeSource === 'switching' }"
@@ -60,6 +47,7 @@
             <span class="label">上传文件</span>
           </button>
 
+          <!-- 摄像头按钮 (开关) -->
           <button 
             class="cyber-btn" 
             :class="{ active: activeSource === 'webcam', 'is-loading': activeSource === 'switching' }"
@@ -74,6 +62,7 @@
         </div>
       </div>
 
+      <!-- 4. Params -->
       <div class="panel-section">
         <h3><span class="deco">#</span> 参数设置</h3>
         <div class="param-item">
@@ -86,17 +75,25 @@
         </div>
       </div>
 
+      <!-- 5. AI 分析 -->
       <div class="panel-section">
-        <h3><span class="deco">#</span> 智能分析</h3>
+        <h3><span class="deco">#</span> AI 智能分析</h3>
         <button 
-          class="cyber-btn ai-btn" 
-          @click="generateReport"
-          :disabled="reportLoading"
+          class="ai-analyze-btn" 
+          @click="requestAIAnalysis"
+          :disabled="aiAnalyzing || (!isStreaming && tableData.length === 0)"
         >
-          <span class="icon" v-if="!reportLoading">📊</span>
-          <span class="icon spin" v-else>⏳</span>
-          <span class="label">{{ reportLoading ? 'AI 正在分析...' : '生成安全简报' }}</span>
+          <span class="icon">🤖</span>
+          <span class="label">{{ aiAnalyzing ? '分析中...' : 'DeepSeek 分析' }}</span>
         </button>
+        <div v-if="aiAnalysis" class="ai-result">
+          <div class="ai-header">
+            <span class="ai-icon">✨</span>
+            <span class="ai-time">{{ aiAnalysis.timestamp }}</span>
+          </div>
+          <div class="ai-content">{{ aiAnalysis.text }}</div>
+        </div>
+        <div v-if="aiError" class="ai-error">{{ aiError }}</div>
       </div>
     </aside>
 
@@ -133,7 +130,7 @@
             {{ isAlarm ? '⚠️ 警报触发' : tableData.length + ' 个目标' }}
           </span>
         </div>
-        <div class="table-scroll custom-scrollbar">
+        <div class="table-scroll">
           <table class="cyber-table">
             <thead>
               <tr>
@@ -144,6 +141,7 @@
               </tr>
             </thead>
             <tbody>
+              <!-- 只有开启流时才渲染数据行 -->
               <template v-if="isStreaming">
                 <tr v-for="row in tableData" :key="row.id">
                   <td class="id-col">#{{ row.id }}</td>
@@ -184,7 +182,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, onBeforeUnmount, watch } from 'vue';
 
-// --- 状态定义 ---
 const isStreaming = ref(false); 
 const isAlarm = ref(false); 
 const isPaused = ref(false);
@@ -194,612 +191,374 @@ const audioUnlocked = ref(false);
 const conf = ref(0.30);
 const iou = ref(0.45);
 const tableData = ref([]);
-const streamUrl = ref('http://localhost:5000/video_feed'); // 建议使用完整URL避免相对路径问题
+const streamUrl = ref('/video_feed');
 const streamKey = ref(Date.now());
+const aiAnalyzing = ref(false);
+const aiAnalysis = ref(null);
+const aiError = ref('');
+const alarmHistory = ref([]);
 let timer = null;
 
-// --- AI 报告相关状态 ---
-const reportLoading = ref(false);
-const aiReport = ref('');
-const showReportModal = ref(false);
-
-// --- 监听与生命周期 ---
+// 监听流状态：关闭时重置数据
 watch(isStreaming, (newVal) => { 
   if (!newVal) {
     tableData.value = [];
     isAlarm.value = false;
     isPaused.value = false;
+    if (activeSource.value !== 'switching') {
+        // 只有非切换状态下才清除源标记
+        // activeSource.value = null; 
+    }
   }
 });
 
 watch(isAlarm, (newVal) => {
-  if (newVal && audioUnlocked.value && alarmAudio.value) {
-    alarmAudio.value.play().catch(e => console.log("Audio play failed", e));
-  } else if (!newVal && alarmAudio.value) {
-    alarmAudio.value.pause();
-    alarmAudio.value.currentTime = 0;
+  if (newVal) alarmAudio.value?.play().catch(() => {});
+  else { if (alarmAudio.value) { alarmAudio.value.pause(); alarmAudio.value.currentTime = 0; } }
+});
+
+const unlockAudio = () => {
+  if (!audioUnlocked.value && alarmAudio.value) {
+    alarmAudio.value.play().then(() => { alarmAudio.value.pause(); audioUnlocked.value = true; }).catch(() => {});
   }
-});
+};
 
-onMounted(() => {
-  timer = setInterval(fetchData, 500); // 降低频率到 500ms 减少负载
-});
-
-onUnmounted(() => {
-  clearInterval(timer);
-  stopStream();
-});
-
-// --- 核心逻辑方法 ---
-
-const fetchData = async () => {
-  if (!isStreaming.value || isPaused.value) return;
-  
+const formatClass = (cls) => cls ? cls.replace(/_/g, ' ').toUpperCase() : 'UNKNOWN';
+const getStatusClass = (cls) => {
+  const c = cls.toLowerCase();
+  if (c.includes('not') || c.includes('normal')) return 'tag-success';
+  if (c.includes('fall')) return 'tag-danger';
+  return 'tag-neutral';
+};
+const getConfColor = (c) => {
+  const v = parseFloat(c);
+  if (v > 80) return 'linear-gradient(90deg, #00f260, #0575e6)';
+  if (v > 50) return 'linear-gradient(90deg, #f12711, #f5af19)';
+  return 'linear-gradient(90deg, #8E2DE2, #4A00E0)';
+};
+const formatBBox = (b) => {
   try {
-    const res = await fetch('http://localhost:5000/data');
+    const a = JSON.parse(b);
+    return `X:${a[0]} Y:${a[1]} | ${a[2]-a[0]}×${a[3]-a[1]}px`;
+  } catch (e) { return b; }
+};
+
+const togglePause = async () => {
+  try {
+    const res = await fetch('/api/video/toggle_pause', { method: 'POST' });
     const data = await res.json();
-    
-    // 更新数据表
-    if (data.data) {
-      tableData.value = data.data;
-      
-      // 检测是否包含 "fall"
-      const hasFall = data.data.some(item => item.class.toLowerCase().includes('fall'));
-      isAlarm.value = hasFall;
-    }
-  } catch (e) {
-    console.error("Data fetch error", e);
-  }
+    isPaused.value = data.is_paused;
+  } catch (e) { console.error(e); }
 };
 
-const updateParams = async () => {
-  try {
-    await fetch('http://localhost:5000/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conf: parseFloat(conf.value), iou: parseFloat(iou.value) })
-    });
-  } catch (e) {
-    console.error("Settings update failed", e);
-  }
-};
-
-// AI 报告生成逻辑
-const generateReport = async () => {
-  reportLoading.value = true;
-  aiReport.value = ''; // 清空旧内容
+// 核心修复：更彻底的停止与释放
+const stopAndRelease = async () => {
+  // 1. 前端停止显示
+  isStreaming.value = false;
+  isAlarm.value = false;
+  tableData.value = [];
+  isPaused.value = false;
   
+  // 2. 告诉后端强制停止当前循环
   try {
-    const response = await fetch('http://localhost:5000/api/report/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
+    await fetch('/api/video/stop', { method: 'POST' });
+  } catch(e) { console.error(e); }
 
-    const data = await response.json();
-
-    if (data.success) {
-      aiReport.value = data.report;
-      showReportModal.value = true;
-    } else {
-      alert("生成失败: " + (data.error || "未知错误"));
-    }
-  } catch (error) {
-    console.error("AI Report Error:", error);
-    alert("无法连接到后端服务器，请确认后端已启动。");
-  } finally {
-    reportLoading.value = false;
-  }
-};
-
-// --- 控制逻辑 ---
-
-const toggleWebcam = async () => {
-  if (activeSource.value === 'switching') return;
-  
-  const targetState = activeSource.value === 'webcam' ? null : 'webcam';
-  await switchSource(targetState, 'webcam');
+  // 3. 等待后端清理
+  await new Promise(r => setTimeout(r, 500));
 };
 
 const handleUpload = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+
+  activeSource.value = 'switching';
   
-  // 上传文件逻辑
+  // 先停止一切
+  await stopAndRelease();
+
   const formData = new FormData();
   formData.append('file', file);
   
-  await switchSource('file', 'upload', formData);
-  e.target.value = ''; // 重置 input
+  try {
+    // 上传文件并开启新流
+    await fetch('/api/upload', { method: 'POST', body: formData });
+    await new Promise(r => setTimeout(r, 300)); // 额外缓冲
+    
+    activeSource.value = 'file';
+    streamKey.value = Date.now();
+    isStreaming.value = true;
+    
+  } catch (error) {
+    console.error('上传失败:', error);
+    activeSource.value = null;
+  } finally {
+    e.target.value = ''; 
+  }
 };
 
-const switchSource = async (targetState, type, payload = null) => {
+const toggleWebcam = async () => {
+  if (isStreaming.value && activeSource.value === 'webcam') {
+    // 关闭逻辑
+    await stopAndRelease();
+    activeSource.value = null;
+    return;
+  }
+
+  // 开启逻辑
   activeSource.value = 'switching';
-  isStreaming.value = false;
+  await stopAndRelease();
+
+  try {
+    await fetch('/api/set_source_webcam', { method: 'POST' });
+    await new Promise(r => setTimeout(r, 500)); // 等待摄像头预热
+    
+    activeSource.value = 'webcam';
+    streamKey.value = Date.now();
+    isStreaming.value = true;
+  } catch (err) { 
+    console.error(err);
+    activeSource.value = null; 
+  } 
+};
+
+// 后端参数更新
+const setWebcam = toggleWebcam; 
+const updateParams = async () => { try { await fetch('/api/update_params', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conf: conf.value, iou: iou.value }) }); } catch (err) {} };
+
+// AI 分析请求
+const requestAIAnalysis = async () => {
+  aiAnalyzing.value = true;
+  aiError.value = '';
   
   try {
-    // 1. 停止当前流
-    await fetch('http://localhost:5000/stop_stream', { method: 'POST' });
+    const response = await fetch('/api/ai/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        detections: tableData.value,
+        alarm_history: alarmHistory.value.slice(-5) // 最近5次报警
+      })
+    });
     
-    // 2. 如果是开启新源
-    if (targetState) {
-      let url = type === 'webcam' ? 'http://localhost:5000/start_webcam' : 'http://localhost:5000/upload_video';
-      let options = { method: 'POST' };
-      
-      if (payload) {
-        options.body = payload; // FormData for upload
-      }
-      
-      const res = await fetch(url, options);
-      const data = await res.json();
-      
-      if (data.success) {
-        activeSource.value = targetState;
-        isStreaming.value = true;
-        streamKey.value = Date.now(); // 强制刷新 img src
-      } else {
-        alert("启动失败: " + data.error);
-        activeSource.value = null;
-      }
+    const result = await response.json();
+    
+    if (result.success) {
+      aiAnalysis.value = {
+        text: result.analysis,
+        timestamp: result.timestamp
+      };
     } else {
-      activeSource.value = null;
+      aiError.value = result.error || 'AI 分析失败';
     }
-  } catch (e) {
-    console.error("Switch source failed", e);
-    activeSource.value = null;
+  } catch (error) {
+    aiError.value = '网络错误: ' + error.message;
+  } finally {
+    aiAnalyzing.value = false;
   }
 };
 
-const stopStream = async () => {
-  isStreaming.value = false;
-  activeSource.value = null;
-  await fetch('http://localhost:5000/stop_stream', { method: 'POST' });
-};
+onMounted(() => {
+  timer = setInterval(async () => {
+    // 修复：每次请求前再次检查 isStreaming
+    if (isStreaming.value) {
+      try {
+        const dataRes = await fetch('/api/data');
+        if (dataRes.ok) {
+          const newData = await dataRes.json();
+          
+          // 修复：请求回来后，如果用户已经关闭了开关，则丢弃数据
+          if (!isStreaming.value) {
+            tableData.value = [];
+            return;
+          }
 
-const togglePause = () => {
-  isPaused.value = !isPaused.value;
-};
+          tableData.value = newData;
+          
+          const hasFallInTable = newData.some(row => {
+            const cls = row.class.toLowerCase();
+            return (cls === 'falling' || (cls.includes('fall') && !cls.includes('not')));
+          });
+          
+          if (hasFallInTable) { 
+            if (!isAlarm.value) {
+              // 新的报警，记录到历史
+              alarmHistory.value.push({
+                time: new Date().toLocaleTimeString(),
+                data: newData.filter(row => row.class.toLowerCase().includes('fall'))
+              });
+              // 保留最近20条
+              if (alarmHistory.value.length > 20) alarmHistory.value.shift();
+            }
+            isAlarm.value = true; 
+          } else {
+            const alarmRes = await fetch('/api/alarm');
+            if (alarmRes.ok) isAlarm.value = (await alarmRes.json()).is_alarm;
+          }
+        }
+      } catch (e) {}
+    }
+  }, 200);
+});
 
-const unlockAudio = () => {
-  if (!audioUnlocked.value && alarmAudio.value) {
-    alarmAudio.value.play().then(() => {
-      alarmAudio.value.pause();
-      audioUnlocked.value = true;
-    }).catch(() => {});
-  }
-};
-
-// --- 辅助格式化方法 ---
-const formatBBox = (bbox) => {
-  if (!bbox) return '-';
-  return `[${bbox.map(n => Math.round(n)).join(', ')}]`;
-};
-
-const formatClass = (cls) => {
-  if (!cls) return 'Unknown';
-  return cls.charAt(0).toUpperCase() + cls.slice(1);
-};
-
-const getStatusClass = (cls) => {
-  const c = cls.toLowerCase();
-  if (c.includes('fall')) return 'status-danger';
-  if (c.includes('person')) return 'status-success';
-  return 'status-warning';
-};
-
-const getConfColor = (conf) => {
-  if (conf > 0.8) return '#00ff9d'; // Green
-  if (conf > 0.5) return '#ffaa00'; // Orange
-  return '#ff4444'; // Red
-};
+onBeforeUnmount(() => { isStreaming.value = false; isAlarm.value = false; if (timer) clearInterval(timer); });
+onUnmounted(() => { if (timer) clearInterval(timer); });
 </script>
 
 <style scoped>
-/* 全局布局 */
-.gui-layout {
-  display: flex;
-  height: 100vh;
-  background: #050505;
-  color: #e0e0e0;
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  overflow: hidden;
-  --primary: #00f3ff;
-  --primary-dim: rgba(0, 243, 255, 0.1);
-  --secondary: #7d44ff;
-  --danger: #ff2a2a;
-  --glass-bg: rgba(20, 20, 30, 0.7);
-  --border: 1px solid rgba(255, 255, 255, 0.1);
-}
+/* 样式保持不变 */
+.gui-layout { display: flex; height: 100%; gap: 20px; padding: 20px; box-sizing: border-box; position: relative; }
+.glass-panel { background: var(--bg-panel); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); }
+.sidebar { width: 300px; padding: 24px; display: flex; flex-direction: column; gap: 24px; overflow-y: auto; }
+.panel-section h3 { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+.deco { color: var(--primary); margin-right: 8px; font-weight: bold; }
+.radio-card { background: rgba(0,0,0,0.2); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.radio-item { font-size: 14px; color: var(--text-dim); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px; }
+.radio-item.active { background: rgba(0, 243, 255, 0.1); color: #fff; border: 1px solid rgba(0, 243, 255, 0.2); }
+.status-indicator { width: 8px; height: 8px; background: #555; border-radius: 50%; }
+.status-indicator.glow { background: var(--success); box-shadow: 0 0 10px var(--success); }
+.cyber-select { width: 100%; background: rgba(0,0,0,0.3); color: #fff; padding: 12px; border: 1px solid var(--border); border-radius: 8px; outline: none; appearance: none; }
+.select-wrapper { position: relative; } .select-arrow { position: absolute; right: 12px; top: 14px; font-size: 10px; color: var(--primary); pointer-events: none; }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cyber-btn { background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-main); padding: 12px; border-radius: 8px; cursor: pointer; transition: 0.3s; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.cyber-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--primary); }
+.cyber-btn.active { background: rgba(0, 243, 255, 0.2); border-color: var(--primary); box-shadow: 0 0 15px rgba(0, 243, 255, 0.3); color: #fff; }
+.cyber-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cyber-switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+.cyber-switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px; border: 1px solid #555; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: #888; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: rgba(0, 255, 157, 0.2); border-color: var(--success); }
+input:checked + .slider:before { transform: translateX(24px); background-color: var(--success); box-shadow: 0 0 10px var(--success); }
+.param-item { margin-bottom: 15px; }
+.param-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: var(--text-dim); }
+.param-val { color: var(--primary); font-family: monospace; }
+.cyber-range { -webkit-appearance: none; width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; outline: none; }
+.cyber-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--primary); border-radius: 50%; cursor: pointer; box-shadow: 0 0 10px var(--primary); }
+.main-content { flex: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.video-wrapper { flex: 2; background: #000; border-radius: 16px; position: relative; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+.video-frame { width: 100%; height: 100%; position: relative; }
+.video-frame.live { border: 1px solid var(--primary); box-shadow: 0 0 20px rgba(0, 243, 255, 0.1); }
+.video-frame.alarm-state { border-color: var(--danger); box-shadow: 0 0 40px var(--danger); }
+.corner { position: absolute; width: 20px; height: 20px; border: 2px solid var(--primary); z-index: 2; }
+.t-l { top: 10px; left: 10px; border-right: none; border-bottom: none; } .t-r { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+.b-l { bottom: 10px; left: 10px; border-right: none; border-top: none; } .b-r { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+.video-feed { width: 100%; height: 100%; object-fit: contain; }
+.video-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, #1a2332 0%, #000 90%); }
+.placeholder-content { text-align: center; position: relative; }
+.radar-scan { width: 200px; height: 200px; border: 2px solid rgba(0, 243, 255, 0.2); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); animation: radar 2s infinite linear; }
+.radar-scan::before { content: ''; position: absolute; top: 0; left: 50%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(0, 243, 255, 0.1)); transform-origin: 0 50%; animation: scan 2s infinite linear; }
+.status-text { font-size: 24px; letter-spacing: 4px; color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.5); margin-bottom: 30px; position: relative; z-index: 10; }
+.neon-btn { background: transparent; border: 1px solid var(--primary); color: var(--primary); padding: 12px 30px; font-size: 14px; letter-spacing: 2px; cursor: pointer; transition: 0.3s; position: relative; z-index: 10; box-shadow: 0 0 15px rgba(0, 243, 255, 0.2); }
+.neon-btn:hover { background: var(--primary); color: #000; box-shadow: 0 0 30px var(--primary); }
+.neon-btn.secondary { border-color: var(--secondary); color: var(--secondary); box-shadow: 0 0 15px rgba(112, 0, 255, 0.2); margin-left: 15px;}
+.neon-btn.secondary:hover { background: var(--secondary); color: #fff; box-shadow: 0 0 30px var(--secondary); }
+@keyframes scan { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.alarm-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 999; box-shadow: inset 0 0 100px rgba(255, 0, 50, 0.6); animation: flash 0.8s infinite; display: flex; justify-content: center; align-items: flex-start; }
+.alarm-banner { background: var(--danger); color: white; padding: 10px 40px; font-weight: bold; font-size: 20px; margin-top: 20px; border-radius: 4px; box-shadow: 0 0 30px var(--danger); }
+@keyframes flash { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-/* 玻璃面板通用样式 */
-.glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  border: var(--border);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+/* 暂停按钮 */
+.control-overlay { position: absolute; bottom: 20px; right: 20px; z-index: 10; }
+.pause-btn { 
+  width: 50px; height: 50px; border-radius: 50%; border: 2px solid var(--primary); 
+  background: rgba(0,0,0,0.5); color: var(--primary); font-size: 20px; cursor: pointer; 
+  display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); transition: 0.3s; 
 }
+.pause-btn:hover { background: var(--primary); color: #000; box-shadow: 0 0 20px var(--primary); }
 
-/* 侧边栏 */
-.sidebar {
-  width: 300px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-  border-right: 1px solid rgba(0, 243, 255, 0.2);
-  z-index: 10;
-}
+/* 表格相关 */
+.data-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.panel-header { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.count-badge { background: rgba(0, 255, 157, 0.1); color: var(--success); padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+.count-badge.alert { background: rgba(255, 0, 85, 0.2); color: var(--danger); animation: pulse 1s infinite; }
+.table-scroll { flex: 1; overflow-y: auto; padding: 0; }
+.cyber-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cyber-table th { text-align: left; padding: 12px 20px; color: var(--text-dim); font-weight: 500; background: rgba(0,0,0,0.4); position: sticky; top: 0; backdrop-filter: blur(5px); z-index: 10; }
+.cyber-table td { padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.03); color: #fff; vertical-align: middle; }
+.cyber-table tr:hover td { background: rgba(255,255,255,0.05); }
+.status-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid transparent; }
+.status-tag .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tag-danger { background: rgba(255, 0, 85, 0.15); color: #ff0055; border-color: rgba(255, 0, 85, 0.3); }
+.tag-success { background: rgba(0, 255, 157, 0.15); color: #00ff9d; border-color: rgba(0, 255, 157, 0.3); }
+.tag-neutral { background: rgba(255, 255, 255, 0.1); color: #ccc; }
+.conf-wrapper { display: flex; align-items: center; gap: 10px; }
+.progress-bg { flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; min-width: 60px; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; box-shadow: 0 0 5px currentColor; }
+.conf-text { font-family: monospace; font-size: 12px; color: var(--text-dim); min-width: 40px; text-align: right; }
+.mono-text { font-family: 'Courier New', monospace; color: var(--text-dim); font-size: 11px; letter-spacing: 0.5px; opacity: 0.8; }
+.empty-state { text-align: center; padding: 30px; color: var(--text-dim); font-style: italic; }
 
-.panel-section h3 {
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  margin-bottom: 12px;
-  color: #889;
-  display: flex;
-  align-items: center;
-}
-
-.deco {
-  color: var(--primary);
-  margin-right: 8px;
-  font-weight: bold;
-}
-
-/* 按钮与输入控件 */
-.action-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.cyber-btn {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid #333;
-  color: #aaa;
+/* AI 分析样式 */
+.ai-analyze-btn {
+  width: 100%;
+  background: linear-gradient(135deg, rgba(138, 43, 226, 0.2), rgba(75, 0, 130, 0.2));
+  border: 1px solid rgba(138, 43, 226, 0.5);
+  color: #fff;
   padding: 12px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: 0.3s;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 8px;
+  font-weight: bold;
+  margin-bottom: 12px;
 }
-
-.cyber-btn:hover:not(:disabled) {
-  border-color: var(--primary);
-  color: white;
-  box-shadow: 0 0 10px var(--primary-dim);
+.ai-analyze-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(138, 43, 226, 0.4), rgba(75, 0, 130, 0.4));
+  box-shadow: 0 0 20px rgba(138, 43, 226, 0.5);
 }
-
-.cyber-btn.active {
-  background: var(--primary-dim);
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.cyber-btn:disabled {
+.ai-analyze-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
-/* AI 按钮特殊样式 */
-.ai-btn {
-  width: 100%;
-  flex-direction: row;
-  justify-content: center;
-  font-weight: bold;
-  border: 1px solid var(--secondary);
-  color: #bfaaff;
+.ai-analyze-btn .icon {
+  font-size: 18px;
 }
-
-.ai-btn:hover:not(:disabled) {
-  background: rgba(125, 68, 255, 0.1);
-  box-shadow: 0 0 15px rgba(125, 68, 255, 0.3);
-  border-color: #9e75ff;
-  color: white;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-  display: inline-block;
-}
-
-@keyframes spin { 100% { transform: rotate(360deg); } }
-
-/* 主内容区 */
-.main-content {
-  flex: 1;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-  position: relative;
-}
-
-/* 视频区域 */
-.video-wrapper {
-  flex: 2;
-  background: #000;
-  border-radius: 16px;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-  border: 1px solid #222;
-}
-
-.video-frame {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.video-feed {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-/* 视频四角装饰 */
-.corner {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--primary);
-  opacity: 0.5;
-  transition: all 0.3s;
-}
-.t-l { top: 10px; left: 10px; border-right: none; border-bottom: none; }
-.t-r { top: 10px; right: 10px; border-left: none; border-bottom: none; }
-.b-l { bottom: 10px; left: 10px; border-right: none; border-top: none; }
-.b-r { bottom: 10px; right: 10px; border-left: none; border-top: none; }
-
-.live .corner {
-  border-color: var(--danger);
-  width: 30px;
-  height: 30px;
-  opacity: 1;
-}
-
-/* 视频占位符 */
-.video-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: radial-gradient(circle, #1a1a2e 0%, #000 100%);
-}
-
-.placeholder-content {
-  text-align: center;
-}
-
-.radar-scan {
-  width: 60px;
-  height: 60px;
-  border: 2px solid #333;
-  border-radius: 50%;
-  margin: 0 auto 20px;
-  position: relative;
-}
-
-.radar-scan::after {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: conic-gradient(from 0deg, transparent 0%, rgba(0, 243, 255, 0.2) 100%);
-  border-radius: 50%;
-  animation: radar 2s linear infinite;
-}
-
-@keyframes radar { 100% { transform: rotate(360deg); } }
-
-/* 数据面板 */
-.data-panel {
-  flex: 1;
-  border-radius: 16px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.panel-header {
-  padding: 15px 20px;
-  background: rgba(255,255,255,0.02);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.count-badge {
-  background: #222;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  color: #888;
-}
-
-.count-badge.alert {
-  background: var(--danger);
-  color: white;
-  animation: pulse 1s infinite;
-}
-
-@keyframes pulse { 50% { opacity: 0.7; } }
-
-.table-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-}
-
-.cyber-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.cyber-table th {
-  text-align: left;
-  padding: 10px;
-  color: #666;
-  font-weight: normal;
-  font-size: 12px;
-}
-
-.cyber-table td {
-  padding: 12px 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
-}
-
-.status-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: bold;
-}
-
-.status-danger { background: rgba(255, 68, 68, 0.1); color: #ff4444; }
-.status-success { background: rgba(0, 255, 157, 0.1); color: #00ff9d; }
-.status-warning { background: rgba(255, 170, 0, 0.1); color: #ffaa00; }
-
-.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
-.progress-bg {
-  height: 4px;
-  background: #333;
-  border-radius: 2px;
-  width: 80%;
-  margin-right: 10px;
-  display: inline-block;
-}
-
-.progress-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
-
-.mono-text { font-family: 'Courier New', monospace; color: #888; font-size: 12px; }
-
-/* 模态框样式 */
-.modal-overlay {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  backdrop-filter: blur(5px);
-}
-
-.modal-content {
-  width: 600px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-}
-
-.modal-header {
-  padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-header h3 { margin: 0; color: var(--primary); }
-
-.close-icon {
-  background: none; border: none; color: #666; font-size: 24px; cursor: pointer;
-}
-.close-icon:hover { color: white; }
-
-.report-body {
-  padding: 25px;
-  overflow-y: auto;
-  color: #ddd;
-  line-height: 1.6;
-  font-size: 14px;
-  background: rgba(0,0,0,0.2);
-}
-
-.report-body pre {
-  white-space: pre-wrap;
-  font-family: inherit;
-  margin: 0;
-}
-
-.modal-footer {
-  padding: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.neon-btn {
-  padding: 8px 20px;
-  background: var(--primary);
-  color: black;
-  border: none;
-  border-radius: 4px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: 0.3s;
-}
-
-.neon-btn:hover {
-  box-shadow: 0 0 15px var(--primary);
-}
-
-.neon-btn.secondary {
-  background: transparent;
-  border: 1px solid #444;
-  color: #ccc;
-}
-.neon-btn.secondary:hover {
-  border-color: white;
-  color: white;
-  box-shadow: none;
-}
-
-/* 滚动条 */
-.custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: #111; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
-
-/* 警报横幅 */
-.alarm-overlay {
-  position: absolute;
-  top: 20px; left: 50%;
-  transform: translateX(-50%);
-  z-index: 99;
-  animation: flash 0.5s infinite;
-}
-
-.alarm-banner {
-  background: var(--danger);
-  color: white;
-  padding: 10px 40px;
-  font-weight: bold;
-  font-size: 20px;
+.ai-result {
+  background: rgba(138, 43, 226, 0.1);
+  border: 1px solid rgba(138, 43, 226, 0.3);
   border-radius: 8px;
-  box-shadow: 0 0 20px var(--danger);
-  text-transform: uppercase;
+  padding: 12px;
+  animation: fadeIn 0.5s ease;
 }
-
-@keyframes flash {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+.ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(138, 43, 226, 0.2);
 }
-
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.ai-icon {
+  font-size: 16px;
+}
+.ai-time {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.ai-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #fff;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.ai-error {
+  background: rgba(255, 0, 85, 0.1);
+  border: 1px solid rgba(255, 0, 85, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 10px;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>

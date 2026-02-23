@@ -37,7 +37,7 @@
         <div class="card-header">
           <h2>{{ currentVideoName || 'Select a video to play' }}</h2>
           <button v-if="currentVideoId" class="download-btn" @click="downloadVideo">
-            ⬇ Download
+            ⬇ 下载
           </button>
         </div>
         

@@ -5,12 +5,12 @@ import time
 import shutil
 import tkinter as tk
 import logging
+from openai import OpenAI
 from tkinter import filedialog
 from flask import Flask, Response, jsonify, request, render_template
 from flask_cors import CORS
 from ultralytics import YOLO
 from werkzeug.utils import secure_filename
-from modules.reporter import AIReporter  # <--- 新增导入
 
 # 导入模块
 try:
@@ -22,6 +22,11 @@ except ImportError:
 # 【新增】导入认证模块
 from modules.auth import AuthModule
 
+# 【新增】导入功能模块蓝图
+from modules.statistics import statistics_bp
+from modules.alarms import alarms_bp
+from modules.settings import settings_bp
+
 # ================= 配置区域 =================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIST = os.path.join(BASE_DIR, '..', 'frontend', 'dist')
@@ -29,6 +34,15 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 MODEL_PATH = os.path.join(BASE_DIR, 'best.pt')
 EVIDENCE_DIR = os.path.join(BASE_DIR, 'evidence')
 FALL_LABELS = ['fall', 'falling', 'down', 'faint', 'lying', 'accident', 'fallen']
+
+# DeepSeek API 配置
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', 'sk-21b6577221de4f35afb85cfef3cfdc02')  # 优先使用环境变量
+
+# 初始化 OpenAI 客户端
+deepseek_client = OpenAI(
+    api_key=DEEPSEEK_API_KEY,
+    base_url="https://api.deepseek.com"
+)
 
 for path in [UPLOAD_FOLDER, EVIDENCE_DIR]:
     if not os.path.exists(path): os.makedirs(path)
@@ -52,13 +66,21 @@ app = Flask(__name__,
 CORS(app)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# ================= 模块初始化 =================
-auth_module = AuthModule(db_name=os.path.join(BASE_DIR, 'users.db'))
+# ================= 注册蓝图 =================
+app.register_blueprint(statistics_bp)
+app.register_blueprint(alarms_bp)
+app.register_blueprint(settings_bp)
 
-storage = None
-if StorageModule:
-    storage = StorageModule(save_dir=EVIDENCE_DIR, buffer_seconds=3, fps=30)
-reporter = AIReporter() # <--- 初始化模块
+# ================= 模块初始化 =================
+# 使用条件初始化，避免多次导入时重复初始化
+if 'auth_module' not in globals():
+    auth_module = AuthModule(db_name=os.path.join(BASE_DIR, 'users.db'))
+
+if 'storage' not in globals():
+    storage = None
+    if StorageModule:
+        storage = StorageModule(save_dir=EVIDENCE_DIR, buffer_seconds=3, after_seconds=2, fps=30)
+
 # ================= 模块 1: 训练管理器 =================
 class TrainingManager:
     def __init__(self):
@@ -93,14 +115,36 @@ class TrainingManager:
         self.metrics["recall"].append(recall)
         print(f"[Training] Epoch {epoch}: Loss={box_loss}, mAP50={map50}")
 
-    def _train_task(self, data_path, epochs, batch):
+    def _train_task(self, data_path, epochs, batch, imgsz=640, optimizer='Adam', lr0=0.01):
         try:
             self.is_training = True
             self.reset()
-            model = YOLO('yolov8n.pt') 
+            
+            # 优化：使用本地预训练权重，避免网络下载
+            pretrained_weights = 'yolov8n.pt'
+            if os.path.exists(pretrained_weights):
+                print(f"[Training] 使用本地预训练权重: {pretrained_weights}")
+            else:
+                print(f"[Training] 首次运行，正在下载预训练权重...")
+            
+            model = YOLO(pretrained_weights) 
             model.add_callback("on_train_epoch_end", self.on_train_epoch_end)
             print(f"开始训练: {data_path}")
-            model.train(data=data_path, epochs=epochs, batch=batch, imgsz=640, project=os.path.join(BASE_DIR, 'runs'), name='detect', exist_ok=True)
+            print(f"训练参数: Epochs={epochs}, Batch={batch}, ImgSize={imgsz}, Optimizer={optimizer}, LR={lr0}")
+            
+            model.train(
+                data=data_path, 
+                epochs=epochs, 
+                batch=batch, 
+                imgsz=imgsz,
+                optimizer=optimizer,
+                lr0=lr0,
+                workers=4,  # 数据加载线程数，根据CPU核心数调整
+                cache=True,  # 缓存图像到内存，加速训练
+                project=os.path.join(BASE_DIR, 'runs'), 
+                name='detect', 
+                exist_ok=True
+            )
             if not self.stop_requested:
                 trained_weight = os.path.join(BASE_DIR, 'runs', 'detect', 'weights', 'best.pt')
                 if os.path.exists(trained_weight):
@@ -113,10 +157,13 @@ class TrainingManager:
             self.is_training = False
             self.stop_requested = False
 
-    def start(self, data_path, epochs, batch):
+    def start(self, data_path, epochs, batch, imgsz=640, optimizer='Adam', lr0=0.01):
         if self.is_training: return False
         if not os.path.exists(data_path): return False
-        self.thread = threading.Thread(target=self._train_task, args=(data_path, epochs, batch))
+        self.thread = threading.Thread(
+            target=self._train_task, 
+            args=(data_path, epochs, batch, imgsz, optimizer, lr0)
+        )
         self.thread.start()
         return True
 
@@ -251,7 +298,14 @@ def browse_dataset_file():
 @app.route('/api/train/start', methods=['POST'])
 def start_train():
     data = request.json
-    if trainer.start(data.get('dataset_path', '').strip('"'), int(data.get('epochs', 50)), int(data.get('batch', 16))):
+    dataset_path = data.get('dataset_path', '').strip('"')
+    epochs = int(data.get('epochs', 50))
+    batch = int(data.get('batch', 16))
+    imgsz = int(data.get('imgsz', 640))
+    optimizer = data.get('optimizer', 'Adam')
+    lr0 = float(data.get('lr0', 0.01))
+    
+    if trainer.start(dataset_path, epochs, batch, imgsz, optimizer, lr0):
         return jsonify({"status": "started"})
     return jsonify({"status": "error"}), 400
 
@@ -297,25 +351,77 @@ def get_table_data():
 def get_alarm_status():
     with lock: return jsonify({"is_alarm": video_state["is_alarm"]})
 
-@app.route('/api/report/generate', methods=['POST'])
-def generate_report():
-    """生成 AI 分析报告接口"""
-    if not storage:
-        return jsonify({"error": "存储模块未启用"}), 500
-    
-    # 1. 获取最近 24 小时数据
-    events = storage.get_recent_events(hours=24)
-    
-    # 2. 调用 AI 生成文本
-    report_content = reporter.generate_daily_report(events)
-    
-    # 3. 返回结果
-    return jsonify({
-        "success": True,
-        "event_count": len(events),
-        "report": report_content
-    })
+@app.route('/api/ai/analyze', methods=['POST'])
+def ai_analyze():
+    """DeepSeek AI 分析跌倒检测数据"""
+    try:
+        data = request.json
+        detection_data = data.get('detections', [])
+        alarm_history = data.get('alarm_history', [])
+        
+        # 构建分析提示词
+        detection_summary = f"检测到 {len(detection_data)} 个目标"
+        alarm_summary = f"跌倒报警次数: {len(alarm_history)} 次"
+        
+        # 格式化检测数据
+        detection_details = "\n".join([
+            f"- 目标{i+1}: {d.get('class', 'unknown')} (置信度: {d.get('conf', 'N/A')})" 
+            for i, d in enumerate(detection_data[:10])  # 最多显示10个
+        ]) if detection_data else "无检测数据"
+        
+        # 格式化报警历史
+        alarm_details = "\n".join([
+            f"- {a.get('time', 'unknown')}: {len(a.get('data', []))} 个跌倒目标"
+            for a in alarm_history[:5]  # 最近5次
+        ]) if alarm_history else "无报警记录"
+        
+        prompt = f"""你是一个专业的跌倒检测系统分析师。请根据以下检测数据进行专业分析：
+
+检测数据摘要：
+- {detection_summary}
+- {alarm_summary}
+
+详细检测记录：
+{detection_details}
+
+报警历史：
+{alarm_details}
+
+请提供以下分析：
+1. 当前场景风险评估（低/中/高风险）
+2. 检测到的主要目标和状态
+3. 是否存在跌倒事件及其严重程度
+4. 安全建议和改进措施
+
+请用简洁专业的中文回答，不超过200字。"""
+        
+        # 使用 OpenAI 客户端调用 DeepSeek API
+        response = deepseek_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "你是一个专业的跌倒检测分析助手，擅长分析视频监控数据并提供安全建议。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500,
+            stream=False
+        )
+        
+        analysis = response.choices[0].message.content
+        
+        return jsonify({
+            "success": True,
+            "analysis": analysis,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        })
+            
+    except Exception as e:
+        print(f"[AI Analysis] 错误: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 if __name__ == '__main__':
     print("系统启动成功！访问 http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)

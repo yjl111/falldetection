@@ -8,16 +8,21 @@ import gridfs
 from bson.objectid import ObjectId
 
 class StorageModule:
-    def __init__(self, save_dir='evidence', buffer_seconds=3, fps=30):
+    def __init__(self, save_dir='evidence', buffer_seconds=3, after_seconds=2, fps=30):
         # 视频保存路径 (生成过程仍需暂存磁盘)
         self.save_dir = save_dir
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
         
         self.fps = fps
+        self.buffer_seconds = buffer_seconds  # 跌倒前的秒数
+        self.after_seconds = after_seconds    # 跌倒后的秒数
         self.buffer_size = buffer_seconds * fps
-        self.frame_buffer = deque(maxlen=self.buffer_size)
+        self.frame_buffer = deque(maxlen=self.buffer_size)  # 跌倒前的帧缓冲
+        self.after_buffer = []  # 跌倒后的帧缓冲
         self.is_saving = False
+        self.is_recording_after = False  # 是否正在录制跌倒后的帧
+        self.after_frame_count = 0  # 已录制的跌倒后帧数
         
         # --- MongoDB 配置 ---
         # 请确保您的 MongoDB 服务已启动
@@ -149,16 +154,39 @@ class StorageModule:
             return None
 
     def buffer_frame(self, frame):
-        self.frame_buffer.append(frame)
+        """缓冲帧：跌倒前存入循环队列，跌倒后存入临时列表"""
+        # 如果正在录制跌倒后的帧
+        if self.is_recording_after:
+            self.after_buffer.append(frame.copy())
+            self.after_frame_count += 1
+            # 检查是否已录制足够的跌倒后帧
+            if self.after_frame_count >= self.after_seconds * self.fps:
+                self._finalize_video()
+        else:
+            # 正常情况下，存入循环缓冲区（跌倒前）
+            self.frame_buffer.append(frame)
 
     def save_event_clip(self):
         """
-        核心功能：保存视频文件 -> 读取二进制 -> 存入 MongoDB
+        触发跌倒事件：标记开始录制跌倒后的帧
         """
-        if self.is_saving: 
-            return 
+        if self.is_saving or self.is_recording_after:
+            return
+        
+        print(f"[Storage] 🎬 跌倒检测触发，开始录制后续 {self.after_seconds} 秒...")
+        self.is_recording_after = True
+        self.after_frame_count = 0
+        self.after_buffer = []
+    
+    def _finalize_video(self):
+        """
+        完成视频录制：合并跌倒前后的帧并保存
+        """
+        if self.is_saving:
+            return
         
         self.is_saving = True
+        self.is_recording_after = False
         
         def _write_task():
             try:
@@ -169,74 +197,77 @@ class StorageModule:
                 abs_path = os.path.join(self.save_dir, filename)
                 rel_path = f"evidence/{filename}"
 
-                # 2. 将视频先写入临时文件 (OpenCV 需要文件路径)
-                frames = list(self.frame_buffer)
-                if not frames:
+                # 2. 合并跌倒前后的帧
+                before_frames = list(self.frame_buffer)  # 跌倒前3秒
+                after_frames = self.after_buffer.copy()  # 跌倒后2秒
+                all_frames = before_frames + after_frames
+                
+                if not all_frames:
+                    print("[Storage] ⚠️ 无有效帧，跳过保存")
                     self.is_saving = False
                     return
                 
-                height, width, _ = frames[0].shape
+                print(f"[Storage] 📊 合并帧数: 跌倒前 {len(before_frames)} 帧 + 跌倒后 {len(after_frames)} 帧 = 总计 {len(all_frames)} 帧")
+                
+                height, width, _ = all_frames[0].shape
 
-                # 尝试使用 H.264 编码 (avc1)，这兼容现代浏览器
-                # 如果系统缺少 openh264 dll，可能回退或失败，如果失败请尝试改为 'vp09' (webm)
+                # 3. 写入视频文件
                 try:
                     fourcc = cv2.VideoWriter_fourcc(*'avc1')
                     out = cv2.VideoWriter(abs_path, fourcc, self.fps, (width, height))
                     if not out.isOpened():
                          raise Exception("avc1 writer not opened")
                 except Exception as e:
-                    # 回退方案
                     print(f"[Storage] avc1 编码不可用 ({e})，尝试回退到 mp4v")
                     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                     out = cv2.VideoWriter(abs_path, fourcc, self.fps, (width, height))
 
-                for f in frames:
+                for f in all_frames:
                     out.write(f)
                 out.release()
-                print(f"[Storage] 🎥 临时文件已生成: {abs_path}")
+                print(f"[Storage] 🎥 视频文件已生成: {abs_path}")
 
-                # 3. 读取生成的文件为二进制数据
+                # 4. 读取生成的文件为二进制数据
                 with open(abs_path, 'rb') as video_file:
                     video_binary = video_file.read()
 
-                # 4. 存入 MongoDB
+                # 5. 存入 MongoDB
                 self._save_to_db(filename, display_time, rel_path, video_binary)
                 
-                # (可选) 如果你想完全依赖数据库，可以在这里删除本地文件
-                # os.remove(abs_path) 
+                # 6. 同时保存报警记录
+                self._save_alarm_record(display_time, filename)
+                
+                # 清空跌倒后缓冲区
+                self.after_buffer = []
 
             except Exception as e:
                 print(f"[Storage] 保存流程异常: {e}")
             finally:
-                time.sleep(3) 
                 self.is_saving = False
 
         threading.Thread(target=_write_task).start()
-    def get_recent_events(self, hours=24):
-        """获取最近 N 小时的跌倒记录"""
+
+    def _save_alarm_record(self, timestamp_str, video_filename):
+        """保存报警记录到MongoDB"""
         if self.db is None:
-            return []
+            return
         
         try:
-            # 计算截止时间戳
-            current_time = time.time()
-            start_time = current_time - (hours * 3600)
+            from datetime import datetime
+            # 生成唯一ID（使用当前时间戳）
+            alarm_id = int(datetime.now().timestamp())
             
-            # 从 history 集合中查询 (假设存储时字段为 timestamp)
-            # 注意：这里假设您的数据库中存储的时间戳是浮点数或兼容格式
-            # 如果您存的是字符串，可能需要调整查询方式
-            cursor = self.db.history.find({
-                "timestamp": {"$gte": start_time}
-            }).sort("timestamp", -1)
+            alarm_record = {
+                "id": alarm_id,
+                "timestamp": datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S"),
+                "location": "监控区域",  # 可以后续根据实际情况更新
+                "type": "跌倒",
+                "status": "待处理",
+                "video_filename": video_filename,
+                "created_at": datetime.now()
+            }
             
-            events = []
-            for doc in cursor:
-                events.append({
-                    "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(doc.get("timestamp", 0))),
-                    "event_type": "Fall Detected", # 或者从 doc 获取具体类型
-                    "video_id": str(doc.get("video_file_id", "N/A"))
-                })
-            return events
+            self.db.alarms.insert_one(alarm_record)
+            print(f"[Storage] 📢 报警记录已保存 (ID: {alarm_id})")
         except Exception as e:
-            print(f"[Storage] 查询历史记录失败: {e}")
-            return []
+            print(f"[Storage] 保存报警记录失败: {e}")

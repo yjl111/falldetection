@@ -20,12 +20,31 @@
 
         <div class="input-group">
           <label>训练轮数 (Epochs)</label>
-          <input type="number" v-model="epochs" :disabled="isTraining">
+          <input type="number" v-model="epochs" :disabled="isTraining" min="1" max="500">
         </div>
 
         <div class="input-group">
           <label>批次大小 (Batch Size)</label>
-          <input type="number" v-model="batch" :disabled="isTraining">
+          <input type="number" v-model="batch" :disabled="isTraining" min="1" max="128">
+        </div>
+
+        <div class="input-group">
+          <label>图像尺寸 (Image Size)</label>
+          <input type="number" v-model="imgsz" :disabled="isTraining" min="320" max="1280" step="32">
+        </div>
+
+        <div class="input-group">
+          <label>优化器 (Optimizer)</label>
+          <select v-model="optimizer" :disabled="isTraining" class="param-select">
+            <option value="SGD">SGD</option>
+            <option value="Adam">Adam</option>
+            <option value="AdamW">AdamW</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label>初始学习率 (Learning Rate)</label>
+          <input type="number" v-model="lr0" :disabled="isTraining" min="0.0001" max="0.1" step="0.001">
         </div>
 
         <div class="action-group">
@@ -120,6 +139,9 @@ const loaded = ref(true);
 const datasetPath = ref('');
 const epochs = ref(50);
 const batch = ref(16);
+const imgsz = ref(640);  // 图像尺寸
+const optimizer = ref('Adam');  // 优化器
+const lr0 = ref(0.01);  // 初始学习率
 const message = ref('');
 const isError = ref(false);
 const metrics = ref({ epochs: [], box_loss: [], cls_loss: [], map50: [], precision: [], recall: [] });
@@ -208,7 +230,14 @@ const startTrain = async () => {
   try {
     const res = await fetch('/api/train/start', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ dataset_path: datasetPath.value, epochs: epochs.value, batch: batch.value })
+      body: JSON.stringify({ 
+        dataset_path: datasetPath.value, 
+        epochs: epochs.value, 
+        batch: batch.value,
+        imgsz: imgsz.value,
+        optimizer: optimizer.value,
+        lr0: lr0.value
+      })
     });
     const d = await res.json();
     if(d.status === 'started') {
@@ -247,7 +276,7 @@ onUnmounted(() => clearInterval(timer));
 .card-header h2 { margin: 0; font-size: 18px; color: #fff; letter-spacing: 1px; }
 .status-badge { font-size: 12px; font-weight: bold; background: #333; padding: 4px 10px; border-radius: 20px; color: #888; transition: 0.3s; }
 .status-badge.running { background: rgba(0, 255, 157, 0.2); color: var(--success); box-shadow: 0 0 10px rgba(0, 255, 157, 0.2); }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 20px; align-items: end; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: end; }
 .input-group { display: flex; flex-direction: column; gap: 8px; }
 .input-group.full-width { grid-column: 1 / -1; }
 .input-group label { font-size: 12px; color: var(--text-dim); font-weight: 500; }
@@ -255,6 +284,10 @@ onUnmounted(() => clearInterval(timer));
 input { background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; outline: none; transition: 0.3s; width: 100%; box-sizing: border-box; }
 input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(0, 243, 255, 0.1); }
 input:disabled { opacity: 0.5; cursor: not-allowed; }
+.param-select { background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; outline: none; transition: 0.3s; width: 100%; box-sizing: border-box; cursor: pointer; }
+.param-select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(0, 243, 255, 0.1); }
+.param-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.param-select option { background: #1a1a2e; color: #fff; padding: 8px; }
 .icon-btn { background: #333; border: 1px solid var(--border); color: #fff; width: 42px; cursor: pointer; border-radius: 8px; transition: 0.2s; }
 .icon-btn:hover:not(:disabled) { background: #444; border-color: #fff; }
 .action-group { display: flex; gap: 10px; }
