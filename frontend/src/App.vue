@@ -2,47 +2,49 @@
   <div class="app-root">
     <div class="background-animation"></div>
     
-    <!-- 认证视图组 -->
     <template v-if="!isLoggedIn">
       <Transition name="fade" mode="out-in">
-        <!-- 根据状态切换登录或注册组件 -->
         <component 
           :is="authView === 'login' ? Login : Register" 
-          @login-success="isLoggedIn = true"
+          @login-success="handleLoginSuccess"
           @switch-to-register="authView = 'register'"
           @switch-to-login="authView = 'login'"
         />
       </Transition>
     </template>
 
-    <!-- 已登录状态：显示主界面 -->
     <div v-else class="main-layout">
       <nav class="top-nav">
         <div class="logo">
           <span class="icon">🛡️</span> 
-          <span class="text">YOLOv8 <span class="highlight">VisionHub</span></span>
+          <span class="text">深度学习<span class="highlight">VisionHub</span></span>
         </div>
         <div class="tabs">
           <button @click="currentTab = 'detect'" :class="{active: currentTab==='detect'}">
             <span class="btn-icon">🔍</span> 实时检测
           </button>
-          <button @click="currentTab = 'train'" :class="{active: currentTab==='train'}">
+          <button v-if="isAdmin" @click="currentTab = 'train'" :class="{active: currentTab==='train'}">
             <span class="btn-icon">🧠</span> 模型训练
-          </button>
-          <button @click="currentTab = 'replay'" :class="{active: currentTab==='replay'}">
-            <span class="btn-icon">🎬</span> 历史回放
-          </button>
-          <button @click="currentTab = 'statistics'" :class="{active: currentTab==='statistics'}">
-            <span class="btn-icon">📊</span> 统计分析
           </button>
           <button @click="currentTab = 'alarm'" :class="{active: currentTab==='alarm'}">
             <span class="btn-icon">🔔</span> 报警管理
           </button>
-          <button @click="currentTab = 'settings'" :class="{active: currentTab==='settings'}">
+          <button @click="currentTab = 'replay'" :class="{active: currentTab==='replay'}">
+            <span class="btn-icon">🎬</span> 历史回放
+          </button>
+          <button v-if="isAdmin" @click="currentTab = 'statistics'" :class="{active: currentTab==='statistics'}">
+            <span class="btn-icon">📊</span> 统计分析
+          </button>
+          <button @click="currentTab = 'contacts'" :class="{active: currentTab==='contacts'}">
+            <span class="btn-icon">📞</span> 紧急联络
+          </button>
+          <button v-if="isAdmin" @click="currentTab = 'logs'" :class="{active: currentTab==='logs'}">
+            <span class="btn-icon">📜</span> 日志中心
+          </button>
+          <button v-if="isAdmin" @click="currentTab = 'settings'" :class="{active: currentTab==='settings'}">
             <span class="btn-icon">⚙️</span> 系统配置
           </button>
         </div>
-        <!-- 登出按钮 -->
         <button class="logout-btn" @click="handleLogout">退出 ➜</button>
       </nav>
 
@@ -56,7 +58,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import Login from './components/Login.vue';
 import Register from './components/Register.vue';
 import DetectionDashboard from './components/DetectionDashboard.vue';
@@ -65,41 +67,54 @@ import VideoReplay from './components/VideoReplay.vue';
 import StatisticsDashboard from './components/StatisticsDashboard.vue';
 import AlarmManagement from './components/AlarmManagement.vue';
 import SystemSettings from './components/SystemSettings.vue';
-import { computed } from 'vue';
+import EmergencyContacts from './components/EmergencyContacts.vue';
+import LogsDashboard from './components/LogsDashboard.vue';
 
 const isLoggedIn = ref(false);
-const authView = ref('login'); // 控制当前显示 'login' 还是 'register'
+const authView = ref('login');
 const currentTab = ref('detect');
+const currentRole = ref('user');
+const isAdmin = computed(() => currentRole.value === 'admin');
 
 const activeComponent = computed(() => {
   switch (currentTab.value) {
     case 'detect': return DetectionDashboard;
-    case 'train': return TrainingDashboard;
+    case 'train': return isAdmin.value ? TrainingDashboard : DetectionDashboard;
     case 'replay': return VideoReplay;
-    case 'statistics': return StatisticsDashboard;
+    case 'statistics': return isAdmin.value ? StatisticsDashboard : DetectionDashboard;
     case 'alarm': return AlarmManagement;
-    case 'settings': return SystemSettings;
+    case 'settings': return isAdmin.value ? SystemSettings : DetectionDashboard;
+    case 'contacts': return EmergencyContacts;
+    case 'logs': return isAdmin.value ? LogsDashboard : DetectionDashboard;
     default: return DetectionDashboard;
   }
 });
 
 onMounted(() => {
-  // 检查本地是否有 Token，如果有则自动登录
   if (localStorage.getItem('token')) {
     isLoggedIn.value = true;
+    currentRole.value = localStorage.getItem('role') || 'user';
   }
 });
 
+const handleLoginSuccess = (payload) => {
+  isLoggedIn.value = true;
+  currentRole.value = payload?.role || localStorage.getItem('role') || 'user';
+  currentTab.value = 'detect';
+};
+
 const handleLogout = () => {
   localStorage.removeItem('token');
+  localStorage.removeItem('username');
+  localStorage.removeItem('role');
+  localStorage.removeItem('login_portal');
   isLoggedIn.value = false;
-  authView.value = 'login'; // 登出后重置为登录页
+  authView.value = 'login';
+  currentRole.value = 'user';
 };
 </script>
 
 <style>
-/* ... (保留你之前的全局样式，无需变动) ... */
-/* 新增登出按钮样式 */
 .logout-btn {
   background: transparent; border: 1px solid rgba(255,0,85,0.3); color: #ff0055;
   padding: 6px 15px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;

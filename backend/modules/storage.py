@@ -3,6 +3,7 @@ import cv2
 import time
 import threading
 from collections import deque
+from datetime import datetime
 import pymongo
 import gridfs
 from bson.objectid import ObjectId
@@ -69,6 +70,75 @@ class StorageModule:
             print(f"[Storage] 📝 MongoDB 记录已添加 (GridFS ID: {grid_file_id})")
         except Exception as e:
             print(f"[Storage] MongoDB 写入错误: {e}")
+
+    def _save_snapshot_record(self, alarm_id, frame):
+        """为报警保存关键帧截图和元数据"""
+        if self.db is None or frame is None:
+            return
+        try:
+            snapshot_name = f"snapshot_{alarm_id}.jpg"
+            snapshot_abs = os.path.join(self.save_dir, snapshot_name)
+            snapshot_rel = f"evidence/{snapshot_name}"
+            cv2.imwrite(snapshot_abs, frame)
+            self.db.alarm_snapshots.insert_one({
+                "alarm_id": alarm_id,
+                "filename": snapshot_name,
+                "filepath": snapshot_rel,
+                "snapshot_type": "alarm_frame",
+                "created_at": datetime.now()
+            })
+            print(f"[Storage] 🖼️ 报警截图已保存: {snapshot_name}")
+        except Exception as e:
+            print(f"[Storage] 保存截图失败: {e}")
+
+    def delete_record(self, record_id_str):
+        """删除一条历史记录（同时删除 GridFS 视频文件和 history 文档，或本地文件）"""
+        # 本地文件
+        if record_id_str.endswith('.mp4'):
+            local_path = os.path.join(self.save_dir, record_id_str)
+            try:
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                return True, "本地文件已删除"
+            except Exception as e:
+                return False, str(e)
+
+        # MongoDB 记录
+        if self.db is None:
+            return False, "数据库未连接"
+        try:
+            record = self.db.history.find_one({"_id": ObjectId(record_id_str)})
+            if not record:
+                return False, "记录不存在"
+            # 删除 GridFS 文件
+            if "video_file_id" in record:
+                try:
+                    self.fs.delete(record["video_file_id"])
+                except Exception:
+                    pass
+            # 删除 history 文档
+            self.db.history.delete_one({"_id": ObjectId(record_id_str)})
+            return True, "记录已删除"
+        except Exception as e:
+            return False, str(e)
+
+    def get_record_by_id(self, record_id_str):
+        """根据 ID 获取单条记录的元数据"""
+        if self.db is None:
+            return None
+        try:
+            doc = self.db.history.find_one({"_id": ObjectId(record_id_str)})
+            if doc:
+                return {
+                    "id": str(doc["_id"]),
+                    "filename": doc["filename"],
+                    "timestamp": doc["timestamp"],
+                    "filepath": doc.get("filepath", ""),
+                    "source": "db"
+                }
+        except Exception:
+            pass
+        return None
 
     def get_all_records(self):
         """查询所有历史记录 (支持 MongoDB 和 本地文件)"""
@@ -269,5 +339,11 @@ class StorageModule:
             
             self.db.alarms.insert_one(alarm_record)
             print(f"[Storage] 📢 报警记录已保存 (ID: {alarm_id})")
+            snapshot_frame = None
+            if self.after_buffer:
+                snapshot_frame = self.after_buffer[0]
+            elif self.frame_buffer:
+                snapshot_frame = self.frame_buffer[-1]
+            self._save_snapshot_record(alarm_id, snapshot_frame)
         except Exception as e:
             print(f"[Storage] 保存报警记录失败: {e}")

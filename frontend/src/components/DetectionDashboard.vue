@@ -84,7 +84,7 @@
           :disabled="aiAnalyzing || (!isStreaming && tableData.length === 0)"
         >
           <span class="icon">🤖</span>
-          <span class="label">{{ aiAnalyzing ? '分析中...' : 'DeepSeek 分析' }}</span>
+          <span class="label">{{ aiAnalyzing ? '分析中...' : 'AI 分析' }}</span>
         </button>
         <div v-if="aiAnalysis" class="ai-result">
           <div class="ai-header">

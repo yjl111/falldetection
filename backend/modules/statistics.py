@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request
 import pymongo
 from datetime import datetime, timedelta
 from collections import defaultdict
+from modules.auth import has_role
 
 statistics_bp = Blueprint('statistics', __name__, url_prefix='/api/statistics')
 
@@ -33,6 +34,9 @@ init_db()
 @statistics_bp.route('/summary', methods=['GET'])
 def get_summary():
     """获取统计摘要数据"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"error": "仅管理员可查看统计分析"}), 403
     if db is None:
         return jsonify({
             "today_falls": 0,
@@ -93,6 +97,9 @@ def get_summary():
 @statistics_bp.route('/hourly', methods=['GET'])
 def get_hourly():
     """获取每小时跌倒分布数据"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"error": "仅管理员可查看统计分析"}), 403
     if db is None:
         return jsonify({
             "labels": ["0-4时", "4-8时", "8-12时", "12-16时", "16-20时", "20-24时"],
@@ -124,6 +131,9 @@ def get_hourly():
 @statistics_bp.route('/trend', methods=['GET'])
 def get_trend():
     """获取趋势数据"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"error": "仅管理员可查看统计分析"}), 403
     days = request.args.get('days', 7, type=int)
     
     if db is None:

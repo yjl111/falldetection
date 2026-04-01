@@ -168,7 +168,110 @@
 - `video_file_id` - 关联GridFS文件
 
 
-### 8. GridFS 集合（视频文件存储）
+### 8. devices（设备与视频源管理表）
+管理多视角和不同房间的摄像头监控节点
+
+```javascript
+{
+  "_id": ObjectId,
+  "device_id": String,       // 设备唯一标识 (如 CAM-001)
+  "name": String,            // 设备名称 (如 "客厅主摄像头")
+  "location": String,        // 物理位置
+  "source_type": String,     // 视频源类型 (rtsp / webcam / local_file)
+  "source_url": String,      // 连接地址或设备号 (如 "rtsp://..." 或 0)
+  "status": String,          // 在线状态 (online / offline / error)
+  "framerate": Number,       // 帧率设置
+  "resolution": String,      // 分辨率
+  "created_at": DateTime     // 接入时间
+}
+```
+
+**索引：**
+- `device_id` (unique) - 确保设备唯一
+
+
+### 9. emergency_contacts（紧急联系人扩展表）
+存储报警关联推送的紧急联系人（如护工、家属）
+
+```javascript
+{
+  "_id": ObjectId,
+  "belong_to_user": String,  // 关联的系统用户名
+  "contact_name": String,    // 联系人姓名
+  "phone": String,           // 手机号 (用于短信/电话)
+  "email": String,           // 邮箱
+  "relationship": String,    // 关系 (如 子女/护工/医生)
+  "notify_level": Number,    // 通知优先级 (1: 立即, 2: 延迟等)
+  "is_active": Boolean       // 是否启用通知
+}
+```
+
+**索引：**
+- `belong_to_user` - 便于根据主账号查询对应联系人列表
+
+
+### 10. model_training_logs（模型训练与指标记录表）
+记录 YOLO 等深度模型的多轮训练、评估指标及权重信息
+
+```javascript
+{
+  "_id": ObjectId,
+  "version_name": String,    // 模型版本名 (如 "v2.1-nightly")
+  "base_model": String,      // 基础模型 (yolo11n.pt / yolov8n.pt)
+  "epochs": Number,          // 训练轮数
+  "start_time": DateTime,    // 训练开始时间
+  "end_time": DateTime,      // 训练结束时间
+  "status": String,          // 状态 (completed / stopped / failed)
+  "metrics": {
+    "best_map50": Number,    // 最佳 mAP 精度
+    "final_loss": Number     // 最终损失值
+  },
+  "weight_path": String      // 保存的权重文件路径
+}
+```
+
+**索引：**
+- `version_name` (unique) - 确保各个训练批次有明确追踪版本号
+
+
+### 11. alarm_feedback（误报反馈与数据收集表）
+收集用户对于系统预测结果的人工复核，用于模型二次训练优化
+
+```javascript
+{
+  "_id": ObjectId,
+  "alarm_id": ObjectId,      // 关联的原始报警 ID
+  "reviewer": String,        // 审核人用户名
+  "is_false_positive": Boolean, // 是否为误报
+  "correct_label": String,   // 修正后的标签 (如 "sitting", "bending")
+  "comment": String,         // 备注描述
+  "reviewed_at": DateTime    // 处理复核时间
+}
+```
+
+**索引：**
+- `alarm_id` - 便于跨表查询具体复核记录
+
+
+### 12. audit_logs（系统审计与操作日志表）
+记录核心资产变更和系统配置敏感操作日志
+
+```javascript
+{
+  "_id": ObjectId,
+  "username": String,        // 操作人
+  "action": String,          // 操作动作 (LOGIN / DELETE_ALARM / UPDATE_CONFIG 等)
+  "ip_address": String,      // 登录IP
+  "details": String,         // 操作详情 (如 "删除了报警记录 ID: 1234")
+  "created_at": DateTime     // 发生时间
+}
+```
+
+**索引：**
+- `created_at` - 便于按时间审计
+
+
+### 13. GridFS 集合（视频文件存储）
 MongoDB GridFS 用于存储大文件（视频）
 
 #### fs.files（文件元数据）

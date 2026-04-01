@@ -1,0 +1,67 @@
+# =========================
+# Environment & secrets
+# =========================
+.env
+.env.local
+.env.*
+!.env.example
+
+# =========================
+# Python cache / local env
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Node dependencies / build
+# =========================
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.vite/
+frontend/.vite/
+
+# =========================
+# IDE / OS files
+# =========================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# =========================
+# Runtime artifacts
+# =========================
+backend/uploads/
+backend/evidence/
+evidence/
+backend/runs/
+_temp_db.log
+
+# =========================
+# Logs / temporary files
+# =========================
+*.log
+*.tmp
+*.temp
+
+# =========================
+# Model / training artifacts
+# Keep tracked baseline models manually if needed.
+# =========================
+backend/runs/**/weights/
+
+# =========================
+# Optional large local assets
+# Uncomment if you decide these should never be tracked:
+# *.pt
+# *.mp4
+# *.avi
+# =========================

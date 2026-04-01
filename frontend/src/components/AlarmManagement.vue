@@ -96,7 +96,7 @@
             </div>
             <div class="alarm-actions">
               <span class="status-badge" :class="alarm.status">{{ alarm.statusText }}</span>
-              <button v-if="alarm.status === 'pending'" @click="handleAlarm(alarm.id)" class="btn-handle">
+              <button v-if="alarm.status === 'pending' && isAdmin" @click="openWorkorderModal(alarm.id)" class="btn-handle">
                 处理
               </button>
               <button @click="viewDetails(alarm.id)" class="btn-detail">详情</button>
@@ -129,6 +129,71 @@
         </div>
       </div>
     </div>
+
+    <div v-if="selectedAlarm" class="modal-overlay" @click="selectedAlarm = null">
+      <div class="modal-content detail-modal" @click.stop>
+        <h3>报警详情</h3>
+        <div class="detail-grid">
+          <div class="detail-row">
+            <span class="detail-label">报警编号</span>
+            <span class="detail-value">#{{ selectedAlarm.id }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">报警时间</span>
+            <span class="detail-value">{{ selectedAlarm.date }} {{ selectedAlarm.time }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">发生位置</span>
+            <span class="detail-value">{{ selectedAlarm.location }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">事件类型</span>
+            <span class="detail-value">{{ selectedAlarm.type }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">当前状态</span>
+            <span class="detail-value">{{ selectedAlarm.statusText }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">描述信息</span>
+            <span class="detail-value">{{ selectedAlarm.description }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">工单结果</span>
+            <span class="detail-value">{{ selectedAlarm.workorder?.result || '暂无工单' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">工单备注</span>
+            <span class="detail-value">{{ selectedAlarm.workorder?.comment || '-' }}</span>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-confirm" @click="selectedAlarm = null">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showWorkorderModal" class="modal-overlay" @click="closeWorkorderModal">
+      <div class="modal-content detail-modal" @click.stop>
+        <h3>处理报警工单</h3>
+        <div class="form-group">
+          <label>处理结果</label>
+          <select v-model="workorderForm.result" class="time-input workorder-select">
+            <option value="已确认真实跌倒">已确认真实跌倒</option>
+            <option value="误报">误报</option>
+            <option value="需继续观察">需继续观察</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>处理备注</label>
+          <textarea v-model="workorderForm.comment" class="workorder-textarea" placeholder="请输入处理说明"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" @click="closeWorkorderModal">取消</button>
+          <button class="btn-confirm" @click="submitWorkorder">提交工单</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -152,6 +217,11 @@ const filterStatus = ref('all');
 const filterDate = ref('');
 const showAddContact = ref(false);
 const newContact = ref({ name: '', phone: '', email: '' });
+const selectedAlarm = ref(null);
+const showWorkorderModal = ref(false);
+const pendingAlarmId = ref(null);
+const workorderForm = ref({ result: '已确认真实跌倒', comment: '' });
+const isAdmin = localStorage.getItem('role') === 'admin';
 
 const filteredAlarms = computed(() => {
   return alarmHistory.value.filter(alarm => {
@@ -167,12 +237,12 @@ const saveConfig = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        sound: alarmConfig.value.enableSound,
-        notification: alarmConfig.value.enableNotification,
-        email: alarmConfig.value.enableEmail,
-        sms: alarmConfig.value.enableSMS,
-        time_start: alarmConfig.value.startTime,
-        time_end: alarmConfig.value.endTime,
+        sound: config.value.enableSound,
+        notification: config.value.enableNotification,
+        email: config.value.enableEmail,
+        sms: config.value.enableSMS,
+        time_start: config.value.startTime,
+        time_end: config.value.endTime,
         contacts: contacts.value
       })
     });
@@ -255,8 +325,58 @@ const handleAlarm = async (id) => {
   }
 };
 
+const openWorkorderModal = (id) => {
+  pendingAlarmId.value = id;
+  workorderForm.value = { result: '已确认真实跌倒', comment: '' };
+  showWorkorderModal.value = true;
+};
+
+const closeWorkorderModal = () => {
+  showWorkorderModal.value = false;
+  pendingAlarmId.value = null;
+};
+
+const fetchWorkorders = async () => {
+  if (!isAdmin) return [];
+  try {
+    const res = await fetch('http://127.0.0.1:5000/api/ext/workorders');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error('获取工单失败:', error);
+    return [];
+  }
+};
+
+const submitWorkorder = async () => {
+  if (!pendingAlarmId.value) return;
+  try {
+    const response = await fetch('http://127.0.0.1:5000/api/ext/workorders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        alarm_id: pendingAlarmId.value,
+        result: workorderForm.value.result,
+        comment: workorderForm.value.comment,
+        status: 'closed'
+      })
+    });
+    const result = await response.json();
+    if (result.success) {
+      await handleAlarm(pendingAlarmId.value);
+      closeWorkorderModal();
+      loadAlarms();
+    } else {
+      alert(result.error || '提交工单失败');
+    }
+  } catch (error) {
+    console.error('提交工单失败:', error);
+  }
+};
+
 const viewDetails = (id) => {
-  alert(`查看报警详情 #${id}`);
+  selectedAlarm.value = alarmHistory.value.find(alarm => alarm.id === id) || null;
 };
 
 // 加载报警数据
@@ -264,33 +384,42 @@ const loadAlarms = async () => {
   try {
     // 获取报警配置
     const configRes = await fetch('http://localhost:5000/api/alarms/config');
-    const config = await configRes.json();
-    alarmConfig.value = {
-      enableSound: config.sound,
-      enableNotification: config.notification,
-      enableEmail: config.email,
-      enableSMS: config.sms,
-      startTime: config.time_start,
-      endTime: config.time_end
+    const configData = await configRes.json();
+    config.value = {
+      enableSound: configData.sound ?? false,
+      enableNotification: configData.notification ?? false,
+      enableEmail: configData.email ?? false,
+      enableSMS: configData.sms ?? false,
+      startTime: configData.time_start || '00:00',
+      endTime: configData.time_end || '23:59'
     };
     
     // 从独立的contacts接口获取联系人列表
     const contactsRes = await fetch('http://localhost:5000/api/alarms/contacts');
-    contacts.value = await contactsRes.json();
+    const contactsData = await contactsRes.json();
+    contacts.value = Array.isArray(contactsData) ? contactsData : [];
 
     // 获取报警历史
-    const historyRes = await fetch('http://localhost:5000/api/alarms');
+    const [historyRes, workorders] = await Promise.all([
+      fetch('http://localhost:5000/api/alarms'),
+      fetchWorkorders()
+    ]);
     const history = await historyRes.json();
-    alarmHistory.value = history.map(alarm => ({
+    const workorderMap = {};
+    workorders.forEach((workorder) => {
+      workorderMap[workorder.alarm_id] = workorder;
+    });
+    alarmHistory.value = (Array.isArray(history) ? history : []).map(alarm => ({
       id: alarm.id,
-      date: alarm.time.split(' ')[0],
-      time: alarm.time.split(' ')[1],
+      date: (alarm.time || '').split(' ')[0] || '',
+      time: (alarm.time || '').split(' ')[1] || '',
       title: '跌倒警报',
       description: `检测到${alarm.location}发生跌倒事件`,
       location: alarm.location,
       type: alarm.type,
       status: alarm.status === '已处理' ? 'handled' : 'pending',
-      statusText: alarm.status
+      statusText: alarm.status,
+      workorder: workorderMap[alarm.id] || null
     }));
   } catch (error) {
     console.error('加载报警数据失败:', error);
@@ -367,8 +496,15 @@ onMounted(() => {
 .form-group { margin-bottom: 15px; }
 .form-group label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
 .form-group input { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 4px; box-sizing: border-box; }
+.workorder-select { width: 100%; }
+.workorder-textarea { width: 100%; min-height: 110px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 4px; box-sizing: border-box; resize: vertical; }
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
 .btn-confirm, .btn-cancel { flex: 1; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
 .btn-confirm { background: var(--primary); color: #000; border: none; }
 .btn-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+.detail-modal { max-width: 520px; }
+.detail-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.detail-row { display: flex; justify-content: space-between; gap: 16px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+.detail-label { color: var(--text-dim); font-size: 13px; flex-shrink: 0; }
+.detail-value { color: #fff; font-size: 14px; text-align: right; word-break: break-word; }
 </style>

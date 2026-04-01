@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request
 import pymongo
 from datetime import datetime
 import os
+from modules.auth import has_role
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/api/settings')
 
@@ -66,6 +67,9 @@ DEFAULT_SETTINGS = {
 @settings_bp.route('', methods=['GET', 'POST'])
 def system_settings():
     """获取或更新系统配置"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"success": False, "message": "仅管理员可访问系统配置"}), 403
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     evidence_dir = os.path.join(base_dir, 'evidence')
     
@@ -144,6 +148,9 @@ def system_settings():
 @settings_bp.route('/detection', methods=['GET', 'POST'])
 def detection_settings():
     """检测参数配置"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"success": False, "message": "仅管理员可访问检测参数"}), 403
     if request.method == 'POST':
         settings = request.json
         
@@ -177,6 +184,9 @@ def detection_settings():
 @settings_bp.route('/storage', methods=['GET', 'POST'])
 def storage_settings():
     """存储配置"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"success": False, "message": "仅管理员可访问存储配置"}), 403
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     evidence_dir = os.path.join(base_dir, 'evidence')
     
@@ -237,6 +247,9 @@ def storage_settings():
 @settings_bp.route('/backup', methods=['POST'])
 def backup_database():
     """备份数据库"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"success": False, "message": "仅管理员可执行备份"}), 403
     print(f"[Settings] 执行数据库备份")
     return jsonify({
         "success": True,
@@ -248,6 +261,9 @@ def backup_database():
 @settings_bp.route('/restore', methods=['POST'])
 def restore_database():
     """恢复数据库"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"success": False, "message": "仅管理员可执行恢复"}), 403
     backup_file = request.json.get('filename')
     print(f"[Settings] 恢复数据库: {backup_file}")
     return jsonify({
@@ -259,6 +275,9 @@ def restore_database():
 @settings_bp.route('/reset', methods=['POST'])
 def reset_settings():
     """重置所有设置"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"success": False, "message": "仅管理员可重置设置"}), 403
     if db is None:
         return jsonify({"success": False, "message": "数据库未连接"}), 500
     
@@ -276,6 +295,9 @@ def reset_settings():
 @settings_bp.route('/clear-data', methods=['POST'])
 def clear_all_data():
     """清空所有数据（危险操作）"""
+    allowed, _ = has_role(request, 'admin')
+    if not allowed:
+        return jsonify({"success": False, "message": "仅管理员可清空数据"}), 403
     confirm = request.json.get('confirm', False)
     if not confirm:
         return jsonify({
