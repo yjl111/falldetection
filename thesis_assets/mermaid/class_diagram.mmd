@@ -1,0 +1,103 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+%% primaryColor: '#ffffff',
+%% primaryTextColor: '#000000',
+%% primaryBorderColor: '#000000',
+%% lineColor: '#000000',
+%% secondaryColor: '#ffffff',
+%% tertiaryColor: '#ffffff',
+%% background: '#ffffff'
+%%}}}%%
+classDiagram
+    class TrainingManager {
+        +bool is_training
+        +bool stop_requested
+        +dict metrics
+        +MongoClient mongo_client
+        +Database db
+        +reset()
+        +start(data_path, epochs, batch, imgsz, optimizer, lr0)
+        +stop()
+        +on_train_epoch_end(trainer)
+    }
+
+    class AuthModule {
+        +str mongo_uri
+        +str db_name
+        +MongoClient client
+        +Database db
+        +Collection users_collection
+        +register(username, password)
+        +login(username, password, expected_role)
+        +verify_token(token)
+        +verify_token_data(token)
+    }
+
+    class StorageModule {
+        +str save_dir
+        +int fps
+        +int buffer_seconds
+        +int after_seconds
+        +deque frame_buffer
+        +list after_buffer
+        +buffer_frame(frame)
+        +save_event_clip()
+        +get_all_records()
+        +get_video_blob(record_id)
+        +delete_record(record_id)
+    }
+
+    class PerceptionModule {
+        +str model_path
+        +YOLO model
+        +load_model()
+        +update_model(new_path)
+        +detect(frame, conf, iou)
+    }
+
+    class DecisionModule {
+        +int consecutive_frames
+        +int FALL_THRESHOLD_FRAMES
+        +analyze(results)
+    }
+
+    class ResponseModule {
+        +bool alarm_active
+        +str alarm_message
+        +float last_print_time
+        +trigger_alarm(message)
+        +reset_alarm()
+        +get_status()
+    }
+
+    class SystemManager {
+        +str base_dir
+        +dict config
+        +dict training_state
+        +setup_logging()
+        +update_params(conf, iou)
+        +set_source(source)
+        +open_file_dialog()
+        +start_training(data_path, epochs, batch)
+    }
+
+    class FlaskApp {
+        +Flask app
+        +dict video_state
+        +generate_frames()
+        +video_feed()
+        +start_train()
+        +upload_file()
+    }
+
+    FlaskApp --> AuthModule : uses
+    FlaskApp --> StorageModule : uses
+    FlaskApp --> TrainingManager : manages
+    FlaskApp --> PerceptionModule : can use
+    FlaskApp --> DecisionModule : can use
+    FlaskApp --> ResponseModule : can use
+
+    SystemManager --> PerceptionModule : coordinates
+    SystemManager --> TrainingManager : similar responsibility
+    TrainingManager --> PerceptionModule : trains YOLO model
+    StorageModule --> ResponseModule : supports alarm evidence
+    DecisionModule --> ResponseModule : triggers alarm

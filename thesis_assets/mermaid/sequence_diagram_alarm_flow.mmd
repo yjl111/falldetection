@@ -1,0 +1,67 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+%% primaryColor: '#ffffff',
+%% primaryTextColor: '#000000',
+%% primaryBorderColor: '#000000',
+%% lineColor: '#000000',
+%% secondaryColor: '#ffffff',
+%% tertiaryColor: '#ffffff',
+%% background: '#ffffff',
+%% actorBkg: '#ffffff',
+%% actorBorder: '#000000',
+%% actorTextColor: '#000000',
+%% signalColor: '#000000',
+%% signalTextColor: '#000000',
+%% labelBoxBkgColor: '#ffffff',
+%% labelBoxBorderColor: '#000000',
+%% loopTextColor: '#000000',
+%% activationBorderColor: '#000000',
+%% activationBkgColor: '#ffffff',
+%% sequenceNumberColor: '#000000'
+%%}}}%%
+sequenceDiagram
+    autonumber
+    actor User as 普通用户/管理员
+    participant FE as 前端检测界面
+    participant BE as Flask后端
+    participant YOLO as YOLO检测模型
+    participant STO as 留证存储模块
+    participant ALM as 报警模块
+    participant DB as MongoDB
+    participant MSG as 短信/邮件服务
+
+    User->>FE: 选择摄像头或上传视频
+    FE->>BE: POST /api/set_source_webcam 或 /api/upload
+    FE->>BE: GET /video_feed
+    BE->>YOLO: 逐帧执行目标检测
+    loop 视频流持续处理
+        YOLO-->>BE: 返回目标类别、置信度、边界框
+        alt 未检测到跌倒
+            BE-->>FE: 推送标注后视频帧
+            FE->>BE: 轮询 /api/data 与 /api/alarm
+            BE-->>FE: 返回检测表格与正常状态
+        else 检测到跌倒
+            BE->>STO: 保存事件前后关键帧/留证视频
+            BE->>ALM: save_alarm_record(location, type)
+            ALM->>DB: 写入 alarms 报警记录
+            ALM->>DB: 读取 alarm_config 通知配置
+            opt 启用邮件通知
+                ALM->>MSG: 发送报警邮件
+                MSG-->>ALM: 返回发送结果
+                ALM->>DB: 写入 notification_logs
+            end
+            opt 启用短信通知
+                ALM->>MSG: 发送报警短信
+                MSG-->>ALM: 返回发送结果
+                ALM->>DB: 写入 notification_logs
+            end
+            BE-->>FE: 返回告警帧与报警状态
+            FE-->>User: 播放声音并高亮显示报警
+        end
+    end
+
+    User->>FE: 进入报警管理页面处理报警
+    FE->>BE: POST /api/alarms/handle/{alarm_id}
+    BE->>DB: 更新报警状态为已处理
+    FE->>BE: POST /api/ext/workorders
+    BE->>DB: 写入 alarm_workorders
+    BE-->>FE: 返回处理结果

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Screenshot Helper</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f172a;
+    }
+    iframe {
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+      display: block;
+      background: #0f172a;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="app-frame" src="/"></iframe>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode') || 'app';
+    let role = params.get('role') || 'admin';
+    let tab = params.get('tab') || 'detect';
+    const state = params.get('state') || '';
+
+    if (state.includes('_')) {
+      const parts = state.split('_');
+      role = parts[0] || role;
+      tab = parts[1] || tab;
+    }
+
+    const tabLabels = {
+      detect: '实时检测',
+      train: '模型训练',
+      alarm: '报警管理',
+      replay: '历史回放',
+      statistics: '统计分析',
+      contacts: '紧急联络',
+      logs: '日志中心',
+      settings: '系统配置'
+    };
+
+    const makeToken = (username, userRole) =>
+      `eyJ1c2VyIjoi${btoa(username).replace(/=/g, '')}Iiwicm9sZSI6Ii${btoa(userRole).replace(/=/g, '')}`;
+
+    if (mode === 'login') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      localStorage.removeItem('role');
+      localStorage.removeItem('login_portal');
+      localStorage.removeItem('screenshot_tab');
+    } else {
+      const username = role === 'admin' ? 'admin' : 'demo_user';
+      localStorage.setItem('token', makeToken(username, role));
+      localStorage.setItem('username', username);
+      localStorage.setItem('role', role);
+      localStorage.setItem('login_portal', role === 'admin' ? 'admin' : 'user');
+      localStorage.setItem('screenshot_tab', tab);
+    }
+
+    const frame = document.getElementById('app-frame');
+    frame.addEventListener('load', () => {
+      if (mode === 'login') return;
+
+      const clickTargetTab = (retry = 0) => {
+        const doc = frame.contentDocument;
+        if (!doc) return;
+        const buttons = Array.from(doc.querySelectorAll('.tabs button'));
+        const target = buttons.find(btn => (btn.innerText || '').includes(tabLabels[tab] || '实时检测'));
+        if (target) {
+          target.click();
+          return;
+        }
+        if (retry < 20) {
+          setTimeout(() => clickTargetTab(retry + 1), 300);
+        }
+      };
+
+      setTimeout(() => clickTargetTab(), 1200);
+    });
+  </script>
+</body>
+</html>

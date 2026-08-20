@@ -1,0 +1,53 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+%% primaryColor: '#ffffff',
+%% primaryTextColor: '#000000',
+%% primaryBorderColor: '#000000',
+%% lineColor: '#000000',
+%% secondaryColor: '#ffffff',
+%% tertiaryColor: '#ffffff',
+%% background: '#ffffff'
+%%}}}%%
+flowchart LR
+    user["普通用户"]
+    admin["管理员"]
+
+    subgraph system["跌倒检测系统"]
+        u1(("注册与登录"))
+        u2(("实时检测查看"))
+        u3(("视频上传 / 摄像头切换"))
+        u4(("报警提示查看"))
+        u5(("历史视频回放"))
+        u6(("个人资料维护"))
+        u7(("紧急联系人管理"))
+        u8(("系统消息查看"))
+
+        a1(("报警记录处理"))
+        a2(("报警策略配置"))
+        a3(("统计分析查看"))
+        a4(("系统参数配置"))
+        a5(("模型训练与指标查看"))
+        a6(("日志中心查看"))
+        a7(("设备与扩展数据管理"))
+    end
+
+    user --> u1
+    user --> u2
+    user --> u3
+    user --> u4
+    user --> u5
+    user --> u6
+    user --> u7
+    user --> u8
+
+    admin --> u1
+    admin --> u2
+    admin --> u3
+    admin --> u4
+    admin --> u5
+    admin --> a1
+    admin --> a2
+    admin --> a3
+    admin --> a4
+    admin --> a5
+    admin --> a6
+    admin --> a7

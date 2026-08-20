@@ -1,0 +1,93 @@
+<mxfile host="app.diagrams.net" modified="2026-04-24T16:42:00.000Z" agent="Codex" version="24.7.17">
+  <diagram id="sequence-diagram" name="时序图">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="p1" value="普通用户/管理员" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="20" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2" value="前端检测界面" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="20" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3" value="Flask后端" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="20" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p4" value="YOLO检测模型" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="650" y="20" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p5" value="留证存储模块" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="850" y="20" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p6" value="报警模块" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="20" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p7" value="MongoDB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1250" y="20" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p8" value="短信/邮件服务" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1450" y="20" width="150" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="l1" style="shape=line;strokeWidth=1;dashed=1;" vertex="1" parent="1"><mxGeometry x="130" y="80" width="1" height="1280" as="geometry"/></mxCell>
+        <mxCell id="l2" style="shape=line;strokeWidth=1;dashed=1;" vertex="1" parent="1"><mxGeometry x="320" y="80" width="1" height="1280" as="geometry"/></mxCell>
+        <mxCell id="l3" style="shape=line;strokeWidth=1;dashed=1;" vertex="1" parent="1"><mxGeometry x="520" y="80" width="1" height="1280" as="geometry"/></mxCell>
+        <mxCell id="l4" style="shape=line;strokeWidth=1;dashed=1;" vertex="1" parent="1"><mxGeometry x="720" y="80" width="1" height="1280" as="geometry"/></mxCell>
+        <mxCell id="l5" style="shape=line;strokeWidth=1;dashed=1;" vertex="1" parent="1"><mxGeometry x="920" y="80" width="1" height="1280" as="geometry"/></mxCell>
+        <mxCell id="l6" style="shape=line;strokeWidth=1;dashed=1;" vertex="1" parent="1"><mxGeometry x="1120" y="80" width="1" height="1280" as="geometry"/></mxCell>
+        <mxCell id="l7" style="shape=line;strokeWidth=1;dashed=1;" vertex="1" parent="1"><mxGeometry x="1320" y="80" width="1" height="1280" as="geometry"/></mxCell>
+        <mxCell id="l8" style="shape=line;strokeWidth=1;dashed=1;" vertex="1" parent="1"><mxGeometry x="1525" y="80" width="1" height="1280" as="geometry"/></mxCell>
+
+        <mxCell id="frameLoop" value="loop 视频流持续处理" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;strokeWidth=2;fillColor=none;align=left;verticalAlign=top;spacingTop=6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="260" width="1170" height="760" as="geometry"/>
+        </mxCell>
+        <mxCell id="frameAlt" value="alt 跌倒检测分支" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;strokeWidth=1;fillColor=none;align=left;verticalAlign=top;spacingTop=6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="370" width="1110" height="560" as="geometry"/>
+        </mxCell>
+        <mxCell id="labelNormal" value="[未检测到跌倒]" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="400" width="180" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="labelAlarm" value="[检测到跌倒]" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="560" width="160" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="labelEmail" value="opt 启用邮件通知" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="710" width="180" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="labelSms" value="opt 启用短信通知" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="820" width="180" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m1" value="1 选择摄像头或上传视频" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;" edge="1" parent="1" source="p1" target="p2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="m2" value="2 POST /api/set_source_webcam 或 /api/upload" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;" edge="1" parent="1" source="p2" target="p3"><mxGeometry relative="1" as="geometry"><mxPoint x="320" y="150" as="sourcePoint"/><mxPoint x="520" y="150" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m3" value="3 GET /video_feed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;" edge="1" parent="1" source="p2" target="p3"><mxGeometry relative="1" as="geometry"><mxPoint x="320" y="200" as="sourcePoint"/><mxPoint x="520" y="200" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m4" value="4 逐帧执行目标检测" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p3" target="p4"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="290" as="sourcePoint"/><mxPoint x="720" y="290" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m5" value="5 返回目标类别、置信度、边界框" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;" edge="1" parent="1" source="p4" target="p3"><mxGeometry relative="1" as="geometry"><mxPoint x="720" y="340" as="sourcePoint"/><mxPoint x="520" y="340" as="targetPoint"/></mxGeometry></mxCell>
+
+        <mxCell id="m6" value="6 推送标注后视频帧" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;" edge="1" parent="1" source="p3" target="p2"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="450" as="sourcePoint"/><mxPoint x="320" y="450" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m7" value="7 轮询 /api/data 与 /api/alarm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p2" target="p3"><mxGeometry relative="1" as="geometry"><mxPoint x="320" y="500" as="sourcePoint"/><mxPoint x="520" y="500" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m8" value="8 返回检测表格与正常状态" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;" edge="1" parent="1" source="p3" target="p2"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="540" as="sourcePoint"/><mxPoint x="320" y="540" as="targetPoint"/></mxGeometry></mxCell>
+
+        <mxCell id="m9" value="9 保存事件前后关键帧/留证视频" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p3" target="p5"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="620" as="sourcePoint"/><mxPoint x="920" y="620" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m10" value="10 save_alarm_record(location, type)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p3" target="p6"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="660" as="sourcePoint"/><mxPoint x="1120" y="660" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m11" value="11 写入 alarms 报警记录" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p6" target="p7"><mxGeometry relative="1" as="geometry"><mxPoint x="1120" y="700" as="sourcePoint"/><mxPoint x="1320" y="700" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m12" value="12 读取 alarm_config 通知配置" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p6" target="p7"><mxGeometry relative="1" as="geometry"><mxPoint x="1120" y="740" as="sourcePoint"/><mxPoint x="1320" y="740" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m13" value="13 发送报警邮件" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p6" target="p8"><mxGeometry relative="1" as="geometry"><mxPoint x="1120" y="780" as="sourcePoint"/><mxPoint x="1525" y="780" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m14" value="14 返回发送结果" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;" edge="1" parent="1" source="p8" target="p6"><mxGeometry relative="1" as="geometry"><mxPoint x="1525" y="810" as="sourcePoint"/><mxPoint x="1120" y="810" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m15" value="15 写入 notification_logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p6" target="p7"><mxGeometry relative="1" as="geometry"><mxPoint x="1120" y="840" as="sourcePoint"/><mxPoint x="1320" y="840" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m16" value="16 发送报警短信" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p6" target="p8"><mxGeometry relative="1" as="geometry"><mxPoint x="1120" y="890" as="sourcePoint"/><mxPoint x="1525" y="890" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m17" value="17 返回发送结果" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;" edge="1" parent="1" source="p8" target="p6"><mxGeometry relative="1" as="geometry"><mxPoint x="1525" y="920" as="sourcePoint"/><mxPoint x="1120" y="920" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m18" value="18 写入 notification_logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p6" target="p7"><mxGeometry relative="1" as="geometry"><mxPoint x="1120" y="950" as="sourcePoint"/><mxPoint x="1320" y="950" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m19" value="19 返回告警帧与报警状态" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;" edge="1" parent="1" source="p3" target="p2"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="980" as="sourcePoint"/><mxPoint x="320" y="980" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m20" value="20 播放声音并高亮显示报警" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;" edge="1" parent="1" source="p2" target="p1"><mxGeometry relative="1" as="geometry"><mxPoint x="320" y="1010" as="sourcePoint"/><mxPoint x="130" y="1010" as="targetPoint"/></mxGeometry></mxCell>
+
+        <mxCell id="m21" value="21 进入报警管理页面处理报警" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p1" target="p2"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="1100" as="sourcePoint"/><mxPoint x="320" y="1100" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m22" value="22 POST /api/alarms/handle/{alarm_id}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p2" target="p3"><mxGeometry relative="1" as="geometry"><mxPoint x="320" y="1140" as="sourcePoint"/><mxPoint x="520" y="1140" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m23" value="23 更新报警状态为已处理" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p3" target="p7"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="1180" as="sourcePoint"/><mxPoint x="1320" y="1180" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m24" value="24 POST /api/ext/workorders" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p2" target="p3"><mxGeometry relative="1" as="geometry"><mxPoint x="320" y="1220" as="sourcePoint"/><mxPoint x="520" y="1220" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m25" value="25 写入 alarm_workorders" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=blockThin;" edge="1" parent="1" source="p3" target="p7"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="1260" as="sourcePoint"/><mxPoint x="1320" y="1260" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m26" value="26 返回处理结果" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;" edge="1" parent="1" source="p3" target="p2"><mxGeometry relative="1" as="geometry"><mxPoint x="520" y="1300" as="sourcePoint"/><mxPoint x="320" y="1300" as="targetPoint"/></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

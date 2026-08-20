@@ -1,0 +1,22 @@
+flowchart LR
+    U["users"] --> P["user_profiles"]
+    U --> EC["emergency_contacts"]
+    U --> UM["user_messages"]
+    U --> NR["notification_rules"]
+    U --> HR["health_reports"]
+
+    A["alarms"] --> WO["alarm_workorders"]
+    A --> NL["notification_logs"]
+    A --> AS["alarm_snapshots"]
+    A --> AF["alarm_feedback"]
+    A --> H["history"]
+
+    H --> GF["fs.files / fs.chunks"]
+
+    D["devices"] --> DH["device_heartbeats"]
+    D --> NR
+
+    S["system_config"] --> C["config"]
+    ML["model_training_logs"] --> AU["audit_logs"]
+    WO --> AU
+    NL --> AU

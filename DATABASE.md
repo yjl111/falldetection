@@ -3,323 +3,591 @@
 ## 数据库名称
 `fall_detection_db`
 
-## 集合（表）结构
+## 当前状态
+本文档已按当前项目代码更新，和 [backend/init_database.py](D:/falldetection/backend/init_database.py)、[backend/modules/extensions.py](D:/falldetection/backend/modules/extensions.py)、[backend/modules/auth.py](D:/falldetection/backend/modules/auth.py) 中的真实实现保持一致。
 
-### 1. users（用户表）
-存储系统用户账户信息
+## 集合总览
+当前项目会使用以下集合：
+
+- `users`
+- `alarms`
+- `alarm_config`
+- `contacts`
+- `system_config`
+- `config`
+- `history`
+- `devices`
+- `emergency_contacts`
+- `model_training_logs`
+- `alarm_feedback`
+- `audit_logs`
+- `notification_logs`
+- `user_profiles`
+- `alarm_workorders`
+- `user_messages`
+- `health_reports`
+- `device_heartbeats`
+- `alarm_snapshots`
+- `notification_rules`
+- `fs.files`
+- `fs.chunks`
+
+## 集合结构
+
+### 1. `users`（用户表）
+存储系统登录账号。当前系统已支持角色区分：
+
+- `admin`：管理端
+- `user`：用户端
 
 ```javascript
 {
-  "_id": ObjectId,           // MongoDB 自动生成
-  "username": String,        // 用户名（唯一）
-  "password": String,        // 密码（明文存储，建议后续改为加密）
-  "created_at": DateTime     // 注册时间
+  "_id": ObjectId,
+  "username": String,
+  "password": String,
+  "role": String,            // admin / user
+  "created_at": DateTime
 }
 ```
 
 **索引：**
-- `username` (unique) - 确保用户名唯一
+- `username` (unique)
 
+**说明：**
+- 当前密码仍为明文存储，后续建议改为哈希。
+- 第一个注册账号会自动成为 `admin`。
 
-### 2. alarms（报警记录表）
-存储跌倒检测报警记录
+### 2. `alarms`（报警记录表）
+存储跌倒检测产生的报警记录。
 
 ```javascript
 {
   "_id": ObjectId,
   "id": Number,              // 报警ID（唯一）
   "timestamp": DateTime,     // 报警时间
-  "location": String,        // 发生位置（卧室/客厅/浴室/厨房）
-  "type": String,            // 跌倒类型（跌倒/摔倒/滑倒等）
-  "status": String,          // 状态（待处理/已处理）
-  "video_filename": String,  // 关联的视频文件名
-  "handled_at": DateTime,    // 处理时间（可选）
-  "created_at": DateTime     // 创建时间
+  "location": String,        // 位置
+  "type": String,            // 事件类型
+  "status": String,          // 待处理 / 已处理 / 已纠错
+  "video_filename": String,  // 关联视频文件名
+  "created_at": DateTime,
+
+  // 处理后可能补充的字段
+  "handled_at": DateTime,
+  "handler": String,
+  "workorder_id": ObjectId,
+  "is_false_positive": Boolean,
+
+  // 预留/可选字段，部分接口会尝试使用
+  "username": String,
+  "device_id": String
 }
 ```
 
 **索引：**
-- `id` (unique) - 报警唯一ID
-- `timestamp` - 便于按时间查询
-- `status` - 便于按状态筛选
+- `id` (unique)
+- `timestamp`
+- `status`
 
-
-### 3. alarm_config（报警配置表）
-存储报警系统配置
+### 3. `alarm_config`（报警配置表）
+存储主报警配置。
 
 ```javascript
 {
   "_id": ObjectId,
-  "key": "main_config",      // 配置键（唯一）
-  "sound": Boolean,          // 是否启用声音
-  "notification": Boolean,   // 是否启用通知
-  "email": Boolean,          // 是否启用邮件
-  "sms": Boolean,           // 是否启用短信
-  "time_start": String,      // 通知时段开始（HH:MM）
-  "time_end": String,        // 通知时段结束（HH:MM）
-  "contacts": Array,         // 联系人列表
-  "updated_at": DateTime     // 更新时间
+  "key": "main_config",
+  "sound": Boolean,
+  "notification": Boolean,
+  "email": Boolean,
+  "sms": Boolean,
+  "time_start": String,      // HH:MM
+  "time_end": String,        // HH:MM
+  "contacts": Array,
+  "updated_at": DateTime
 }
 ```
 
 **索引：**
-- `key` (unique) - 配置键唯一
+- `key` (unique)
 
-
-### 4. contacts（联系人表）
-存储报警联系人信息
+### 4. `contacts`（报警联系人表）
+存储报警模块中的基础联系人。
 
 ```javascript
 {
   "_id": ObjectId,
-  "id": Number,              // 联系人ID（唯一）
-  "name": String,            // 姓名
-  "phone": String,           // 电话
-  "email": String,           // 邮箱
-  "created_at": DateTime     // 创建时间
+  "id": Number,
+  "name": String,
+  "phone": String,
+  "email": String,
+  "created_at": DateTime
 }
 ```
 
 **索引：**
-- `id` (unique) - 联系人唯一ID
+- `id` (unique)
 
-
-### 5. system_config（系统配置表）
-存储系统参数配置
+### 5. `system_config`（系统设置表）
+存储系统参数与界面配置。
 
 ```javascript
 {
   "_id": ObjectId,
-  "key": "main_settings",    // 配置键（唯一）
-  "detection": {             // 检测参数
-    "confidence": Number,     // 置信度阈值
-    "iou": Number,           // IoU阈值
-    "areas": {               // 检测区域
+  "key": "main_settings",
+  "detection": {
+    "confidence": Number,
+    "iou": Number,
+    "areas": {
       "bedroom": Boolean,
       "livingroom": Boolean,
       "bathroom": Boolean,
       "kitchen": Boolean
     }
   },
-  "storage": {               // 存储设置
-    "beforeSeconds": Number,  // 跌倒前秒数
-    "afterSeconds": Number,   // 跌倒后秒数
-    "autoClean": String      // 自动清理策略
+  "storage": {
+    "beforeSeconds": Number,
+    "afterSeconds": Number,
+    "autoClean": String
   },
-  "system": {                // 系统配置
-    "language": String,       // 语言
-    "theme": String,         // 主题
+  "system": {
+    "language": String,
+    "theme": String,
     "logs": {
       "enable": Boolean,
       "debug": Boolean
     }
   },
-  "advanced": {              // 高级设置
-    "gpu": Boolean,          // GPU加速
-    "workers": Number,       // 线程数
-    "apiUrl": String         // API地址
+  "advanced": {
+    "gpu": Boolean,
+    "workers": Number,
+    "apiUrl": String
   },
-  "updated_at": DateTime     // 更新时间
+  "updated_at": DateTime
 }
 ```
 
 **索引：**
-- `key` (unique) - 配置键唯一
+- `key` (unique)
 
-
-### 6. config（通用配置表）
-存储系统级别的通用配置
-
-```javascript
-{
-  "_id": ObjectId,
-  "key": String,             // 配置键（唯一）
-  "value": Mixed,            // 配置值（可以是任意类型）
-  "updated_at": DateTime     // 更新时间
-}
-```
-
-**示例数据：**
-```javascript
-{ "key": "accuracy", "value": 94.5 }      // 系统准确率
-{ "key": "uptime", "value": 99.8 }        // 系统运行时间
-```
-
-**索引：**
-- `key` (unique) - 配置键唯一
-
-
-### 7. history（视频历史记录表）
-存储视频证据的元数据
+### 6. `config`（通用配置表）
+存储全局统计或系统级配置。
 
 ```javascript
 {
   "_id": ObjectId,
-  "filename": String,        // 文件名
-  "timestamp": String,       // 时间戳（显示用）
-  "filepath": String,        // 文件路径（相对路径）
-  "video_file_id": ObjectId, // GridFS文件ID（关联fs.files）
-  "created_at": DateTime     // 创建时间
+  "key": String,
+  "value": Mixed,
+  "updated_at": DateTime
 }
 ```
 
 **索引：**
-- `timestamp` - 便于按时间查询
-- `video_file_id` - 关联GridFS文件
+- `key` (unique)
 
+**当前示例值：**
+```javascript
+{ "key": "accuracy", "value": 94.5 }
+{ "key": "uptime", "value": 99.8 }
+```
 
-### 8. devices（设备与视频源管理表）
-管理多视角和不同房间的摄像头监控节点
+### 7. `history`（视频历史记录表）
+存储证据视频元数据，视频本体走 GridFS。
 
 ```javascript
 {
   "_id": ObjectId,
-  "device_id": String,       // 设备唯一标识 (如 CAM-001)
-  "name": String,            // 设备名称 (如 "客厅主摄像头")
-  "location": String,        // 物理位置
-  "source_type": String,     // 视频源类型 (rtsp / webcam / local_file)
-  "source_url": String,      // 连接地址或设备号 (如 "rtsp://..." 或 0)
-  "status": String,          // 在线状态 (online / offline / error)
-  "framerate": Number,       // 帧率设置
-  "resolution": String,      // 分辨率
-  "created_at": DateTime     // 接入时间
+  "filename": String,
+  "timestamp": String,
+  "filepath": String,
+  "video_file_id": ObjectId,
+  "created_at": DateTime
 }
 ```
 
 **索引：**
-- `device_id` (unique) - 确保设备唯一
+- `timestamp`
+- `video_file_id`
 
-
-### 9. emergency_contacts（紧急联系人扩展表）
-存储报警关联推送的紧急联系人（如护工、家属）
+### 8. `devices`（设备管理表）
+管理摄像头和视频源。
 
 ```javascript
 {
   "_id": ObjectId,
-  "belong_to_user": String,  // 关联的系统用户名
-  "contact_name": String,    // 联系人姓名
-  "phone": String,           // 手机号 (用于短信/电话)
-  "email": String,           // 邮箱
-  "relationship": String,    // 关系 (如 子女/护工/医生)
-  "notify_level": Number,    // 通知优先级 (1: 立即, 2: 延迟等)
-  "is_active": Boolean       // 是否启用通知
+  "device_id": String,
+  "name": String,
+  "location": String,
+  "source_type": String,     // rtsp / webcam / local_file
+  "source_url": String,
+  "status": String,          // online / offline / error
+  "framerate": Number,
+  "resolution": String,
+  "created_at": DateTime
 }
 ```
 
 **索引：**
-- `belong_to_user` - 便于根据主账号查询对应联系人列表
+- `device_id` (unique)
 
-
-### 10. model_training_logs（模型训练与指标记录表）
-记录 YOLO 等深度模型的多轮训练、评估指标及权重信息
+### 9. `emergency_contacts`（紧急联系人表）
+存储用户专属的紧急联系人。
 
 ```javascript
 {
   "_id": ObjectId,
-  "version_name": String,    // 模型版本名 (如 "v2.1-nightly")
-  "base_model": String,      // 基础模型 (yolo11n.pt / yolov8n.pt)
-  "epochs": Number,          // 训练轮数
-  "start_time": DateTime,    // 训练开始时间
-  "end_time": DateTime,      // 训练结束时间
-  "status": String,          // 状态 (completed / stopped / failed)
+  "belong_to_user": String,
+  "contact_name": String,
+  "phone": String,
+  "email": String,
+  "relationship": String,
+  "notify_level": Number,
+  "is_active": Boolean,
+  "created_at": DateTime
+}
+```
+
+**索引：**
+- `belong_to_user`
+
+### 10. `model_training_logs`（模型训练日志表）
+记录训练流程和结果。
+
+```javascript
+{
+  "_id": ObjectId,
+  "version_name": String,
+  "base_model": String,
+  "dataset_path": String,
+  "epochs": Number,
+  "batch": Number,
+  "imgsz": Number,
+  "optimizer": String,
+  "lr0": Number,
+  "start_time": DateTime,
+  "end_time": DateTime,
+  "status": String,          // running / completed / stopped / failed
   "metrics": {
-    "best_map50": Number,    // 最佳 mAP 精度
-    "final_loss": Number     // 最终损失值
+    "best_map50": Number,
+    "final_loss": Number
   },
-  "weight_path": String      // 保存的权重文件路径
+  "weight_path": String
 }
 ```
 
 **索引：**
-- `version_name` (unique) - 确保各个训练批次有明确追踪版本号
+- `version_name` (unique)
 
-
-### 11. alarm_feedback（误报反馈与数据收集表）
-收集用户对于系统预测结果的人工复核，用于模型二次训练优化
+### 11. `alarm_feedback`（误报反馈表）
+存储人工复核结果。
 
 ```javascript
 {
   "_id": ObjectId,
-  "alarm_id": ObjectId,      // 关联的原始报警 ID
-  "reviewer": String,        // 审核人用户名
-  "is_false_positive": Boolean, // 是否为误报
-  "correct_label": String,   // 修正后的标签 (如 "sitting", "bending")
-  "comment": String,         // 备注描述
-  "reviewed_at": DateTime    // 处理复核时间
+  "alarm_id": ObjectId | Number,
+  "reviewer": String,
+  "is_false_positive": Boolean,
+  "correct_label": String,
+  "comment": String,
+  "reviewed_at": DateTime
 }
 ```
 
 **索引：**
-- `alarm_id` - 便于跨表查询具体复核记录
+- `alarm_id`
 
-
-### 12. audit_logs（系统审计与操作日志表）
-记录核心资产变更和系统配置敏感操作日志
+### 12. `audit_logs`（审计日志表）
+记录用户关键操作。
 
 ```javascript
 {
   "_id": ObjectId,
-  "username": String,        // 操作人
-  "action": String,          // 操作动作 (LOGIN / DELETE_ALARM / UPDATE_CONFIG 等)
-  "ip_address": String,      // 登录IP
-  "details": String,         // 操作详情 (如 "删除了报警记录 ID: 1234")
-  "created_at": DateTime     // 发生时间
+  "username": String,
+  "action": String,
+  "details": String,
+  "target_type": String,
+  "target_id": Mixed,
+  "status": String,          // success / failed
+  "created_at": DateTime
 }
 ```
 
 **索引：**
-- `created_at` - 便于按时间审计
+- `created_at`
+- `username`
+- `action`
 
+**当前已接入的典型动作：**
+- 登录 / 注册
+- 更新报警配置
+- 处理报警
+- 增删联系人
+- 增删改设备
+- 更新用户资料
+- 生成健康报告
 
-### 13. GridFS 集合（视频文件存储）
-MongoDB GridFS 用于存储大文件（视频）
+### 13. `notification_logs`（通知日志表）
+记录短信、邮件等发送结果。
 
-#### fs.files（文件元数据）
-```javascript
-{
-  "_id": ObjectId,           // 文件唯一ID
-  "filename": String,        // 文件名
-  "length": Number,          // 文件大小（字节）
-  "chunkSize": Number,       // 分块大小
-  "uploadDate": DateTime,    // 上传时间
-  "contentType": String      // MIME类型（video/mp4）
-}
-```
-
-#### fs.chunks（文件分块）
 ```javascript
 {
   "_id": ObjectId,
-  "files_id": ObjectId,      // 关联的文件ID
-  "n": Number,               // 块序号
-  "data": Binary             // 二进制数据
+  "alarm_id": Number,
+  "channel": String,         // sms / email
+  "recipient": String,
+  "success": Boolean,
+  "message": String,
+  "created_at": DateTime
 }
 ```
 
+**索引：**
+- `alarm_id`
+- `channel`
+- `created_at`
 
-## 使用方法
+### 14. `user_profiles`（用户资料表）
+存储用户端个人信息。
+
+```javascript
+{
+  "_id": ObjectId,
+  "username": String,
+  "real_name": String,
+  "phone": String,
+  "address": String,
+  "age": Number | String,
+  "medical_notes": String,
+  "updated_at": DateTime
+}
+```
+
+**索引：**
+- `username` (unique)
+
+### 15. `alarm_workorders`（报警工单表）
+存储管理员对报警的处理结果。
+
+```javascript
+{
+  "_id": ObjectId,
+  "alarm_id": Number,
+  "handler": String,
+  "result": String,
+  "comment": String,
+  "status": String,          // closed 等
+  "created_at": DateTime,
+  "handled_at": DateTime
+}
+```
+
+**索引：**
+- `alarm_id`
+- `handler`
+- `created_at`
+
+### 16. `user_messages`（用户消息表）
+存储系统发给用户的站内消息。
+
+```javascript
+{
+  "_id": ObjectId,
+  "username": String,
+  "title": String,
+  "content": String,
+  "type": String,            // system / alarm
+  "is_read": Boolean,
+  "created_at": DateTime,
+  "read_at": DateTime
+}
+```
+
+**索引：**
+- `username`
+- `is_read`
+- `created_at`
+
+### 17. `health_reports`（健康报告表）
+存储日报、周报等统计报告。
+
+```javascript
+{
+  "_id": ObjectId,
+  "username": String,
+  "report_type": String,     // daily / weekly / monthly
+  "start_date": DateTime,
+  "end_date": DateTime,
+  "fall_count": Number,
+  "false_positive_count": Number,
+  "high_risk_period": String,
+  "summary": String,
+  "created_at": DateTime
+}
+```
+
+**索引：**
+- `username`
+- `report_type`
+- `created_at`
+
+### 18. `device_heartbeats`（设备心跳表）
+存储设备在线状态上报。
+
+```javascript
+{
+  "_id": ObjectId,
+  "device_id": String,
+  "status": String,          // online / offline
+  "ping_at": DateTime,
+  "latency": Number | null,
+  "remark": String
+}
+```
+
+**索引：**
+- `device_id`
+- `ping_at`
+
+### 19. `alarm_snapshots`（报警截图表）
+存储报警关键帧截图元数据。
+
+```javascript
+{
+  "_id": ObjectId,
+  "alarm_id": Number,
+  "filename": String,
+  "filepath": String,
+  "snapshot_type": String,   // alarm_frame
+  "created_at": DateTime
+}
+```
+
+**索引：**
+- `alarm_id`
+- `created_at`
+
+### 20. `notification_rules`（通知规则表）
+存储用户自定义通知策略。
+
+```javascript
+{
+  "_id": ObjectId,
+  "username": String,
+  "device_id": String,
+  "alarm_type": String,
+  "time_start": String,      // HH:MM
+  "time_end": String,        // HH:MM
+  "channels": Array,         // ["sms", "email"]
+  "target_contacts": Array,  // 联系人名称列表
+  "enabled": Boolean,
+  "updated_at": DateTime
+}
+```
+
+**索引：**
+- `username`
+- `device_id`
+- `enabled`
+
+### 21. GridFS 集合（视频文件存储）
+MongoDB GridFS 用于保存大文件视频。
+
+#### `fs.files`
+```javascript
+{
+  "_id": ObjectId,
+  "filename": String,
+  "length": Number,
+  "chunkSize": Number,
+  "uploadDate": DateTime,
+  "contentType": String
+}
+```
+
+#### `fs.chunks`
+```javascript
+{
+  "_id": ObjectId,
+  "files_id": ObjectId,
+  "n": Number,
+  "data": Binary
+}
+```
+
+## 主要接口与集合对应
+
+### 认证与角色
+- 注册 / 登录：`users`
+- 登录令牌校验：基于 JWT 负载返回 `username`、`role`
+
+### 报警相关
+- 报警记录：`alarms`
+- 报警配置：`alarm_config`
+- 联系人：`contacts`
+- 报警工单：`alarm_workorders`
+- 通知日志：`notification_logs`
+- 报警截图：`alarm_snapshots`
+- 误报反馈：`alarm_feedback`
+
+### 用户端
+- 用户资料：`user_profiles`
+- 用户消息：`user_messages`
+- 紧急联系人：`emergency_contacts`
+- 通知规则：`notification_rules`
+- 健康报告：`health_reports`
+
+### 管理端
+- 设备管理：`devices`
+- 设备心跳：`device_heartbeats`
+- 训练日志：`model_training_logs`
+- 审计日志：`audit_logs`
+- 系统设置：`system_config`
+
+## 数据流程
+
+1. 用户注册/登录
+   - 数据写入 `users`
+   - 同时写入 `audit_logs`
+
+2. 跌倒检测触发
+   - 视频文件写入 `fs.files` + `fs.chunks`
+   - 视频元数据写入 `history`
+   - 报警记录写入 `alarms`
+   - 关键帧截图元数据写入 `alarm_snapshots`
+   - 如触发通知，写入 `notification_logs`
+
+3. 管理员处理报警
+   - 工单写入 `alarm_workorders`
+   - 原报警更新 `status`、`handled_at`、`handler`、`workorder_id`
+   - 给用户写入 `user_messages`
+   - 审计写入 `audit_logs`
+
+4. 用户维护个人中心
+   - 个人资料写入 `user_profiles`
+   - 紧急联系人写入 `emergency_contacts`
+   - 通知规则写入 `notification_rules`
+
+5. 设备与训练
+   - 设备管理写入 `devices`
+   - 心跳写入 `device_heartbeats`
+   - 训练过程写入 `model_training_logs`
+
+6. 报表与复核
+   - 误报复核写入 `alarm_feedback`
+   - 健康报告写入 `health_reports`
+
+## 初始化与查看
 
 ### 1. 初始化数据库
-运行初始化脚本创建所有集合和索引：
-
 ```bash
 python backend/init_database.py
 ```
 
-### 2. 启动MongoDB
-确保MongoDB服务已启动：
-
+### 2. 启动 MongoDB
 ```bash
 # Windows
 net start MongoDB
-
-# Linux/Mac
-sudo systemctl start mongod
 ```
 
-### 3. 查看数据库
-使用MongoDB Compass或命令行工具：
-
+### 3. 查看集合
 ```bash
 mongo
 use fall_detection_db
@@ -327,15 +595,7 @@ show collections
 db.alarms.find().pretty()
 ```
 
-
-## 数据流程
-
-1. **用户注册/登录** → `users` 表
-2. **跌倒检测触发** → 
-   - 视频保存到 `GridFS` (fs.files + fs.chunks)
-   - 元数据保存到 `history` 表
-   - 报警记录保存到 `alarms` 表
-3. **报警配置** → `alarm_config` 表
-4. **联系人管理** → `contacts` 表
-5. **系统设置** → `system_config` 表
-6. **统计数据** → 从 `alarms` 表聚合计算
+## 备注
+- 当前数据库连接仍默认使用本地 MongoDB：`mongodb://localhost:27017/`
+- 当前文档描述的是“代码实际已接入状态”，不是纯设计草案
+- 若后续继续扩展多设备关联、报警归属用户、模型部署记录，建议同步更新本文件

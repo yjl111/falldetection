@@ -5,6 +5,7 @@ import time
 import shutil
 import tkinter as tk
 import logging
+import json
 from datetime import datetime
 import pymongo
 from openai import OpenAI
@@ -356,6 +357,121 @@ def generate_frames():
 # ================= API 路由 =================
 @app.route('/')
 def index(): return render_template('index.html')
+
+
+@app.route('/__screenshot__')
+def screenshot_helper():
+    """用于论文截图的辅助页面：设置登录态并切换到指定标签。"""
+    mode = request.args.get('mode', 'app').strip().lower()
+    role = request.args.get('role', 'admin').strip().lower()
+    tab = request.args.get('tab', 'detect').strip().lower()
+    state = request.args.get('state', '').strip().lower()
+
+    if state and '_' in state:
+        role, tab = state.split('_', 1)
+
+    tab_labels = {
+        'detect': '实时检测',
+        'train': '模型训练',
+        'alarm': '报警管理',
+        'replay': '历史回放',
+        'statistics': '统计分析',
+        'contacts': '紧急联络',
+        'logs': '日志中心',
+        'settings': '系统配置',
+    }
+
+    if mode == 'login':
+        token = ''
+        username = ''
+        role = 'user'
+    else:
+        username = 'admin' if role == 'admin' else 'demo_user'
+        token = issue_token(username, role)
+
+    payload = {
+        'mode': mode,
+        'role': role,
+        'tab': tab,
+        'tabLabel': tab_labels.get(tab, '实时检测'),
+        'token': token,
+        'username': username,
+        'portal': 'admin' if role == 'admin' else 'user',
+    }
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Screenshot Helper</title>
+  <style>
+    html, body {{
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f172a;
+    }}
+    iframe {{
+      border: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      background: #0f172a;
+    }}
+  </style>
+</head>
+<body>
+  <iframe id="appFrame" src="/"></iframe>
+  <script>
+    const payload = {json.dumps(payload, ensure_ascii=False)};
+
+    if (payload.mode === 'login') {{
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      localStorage.removeItem('role');
+      localStorage.removeItem('login_portal');
+    }} else {{
+      localStorage.setItem('token', payload.token);
+      localStorage.setItem('username', payload.username);
+      localStorage.setItem('role', payload.role);
+      localStorage.setItem('login_portal', payload.portal);
+    }}
+
+    const frame = document.getElementById('appFrame');
+
+    frame.addEventListener('load', () => {{
+      if (payload.mode === 'login') {{
+        return;
+      }}
+
+      const attemptSelect = (retry = 0) => {{
+        const doc = frame.contentDocument;
+        if (!doc) {{
+          return;
+        }}
+
+        const buttons = Array.from(doc.querySelectorAll('.tabs button'));
+        const target = buttons.find((button) =>
+          (button.innerText || '').includes(payload.tabLabel)
+        );
+
+        if (target) {{
+          target.click();
+          return;
+        }}
+
+        if (retry < 20) {{
+          setTimeout(() => attemptSelect(retry + 1), 300);
+        }}
+      }};
+
+      setTimeout(() => attemptSelect(), 1200);
+    }});
+  </script>
+</body>
+</html>"""
 
 @app.route('/video_feed')
 def video_feed(): return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')

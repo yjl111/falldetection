@@ -1,0 +1,156 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+%% primaryColor: '#ffffff',
+%% primaryTextColor: '#000000',
+%% primaryBorderColor: '#000000',
+%% lineColor: '#000000',
+%% secondaryColor: '#ffffff',
+%% tertiaryColor: '#ffffff',
+%% background: '#ffffff'
+%%}}}%%
+erDiagram
+    USERS {
+        ObjectId _id
+        string username
+        string password
+        string role
+        datetime created_at
+    }
+
+    USER_PROFILES {
+        ObjectId _id
+        string username
+        string real_name
+        string phone
+        string address
+        int age
+    }
+
+    EMERGENCY_CONTACTS {
+        ObjectId _id
+        string belong_to_user
+        string contact_name
+        string phone
+        string relationship
+        bool is_active
+    }
+
+    USER_MESSAGES {
+        ObjectId _id
+        string username
+        string title
+        string content
+        bool is_read
+        datetime created_at
+    }
+
+    DEVICES {
+        ObjectId _id
+        string device_id
+        string name
+        string location
+        string source_type
+        string status
+    }
+
+    ALARMS {
+        ObjectId _id
+        int id
+        datetime timestamp
+        string location
+        string type
+        string status
+        string username
+        string device_id
+    }
+
+    ALARM_WORKORDERS {
+        ObjectId _id
+        int alarm_id
+        string result
+        string status
+        string comment
+        datetime created_at
+    }
+
+    ALARM_FEEDBACK {
+        ObjectId _id
+        int alarm_id
+        string reviewer
+        bool is_false_positive
+        string comment
+    }
+
+    ALARM_SNAPSHOTS {
+        ObjectId _id
+        int alarm_id
+        string image_path
+        datetime created_at
+    }
+
+    NOTIFICATION_LOGS {
+        ObjectId _id
+        int alarm_id
+        string channel
+        string recipient
+        bool success
+        datetime created_at
+    }
+
+    HISTORY {
+        ObjectId _id
+        string filename
+        string timestamp
+        ObjectId video_file_id
+        datetime created_at
+    }
+
+    MODEL_TRAINING_LOGS {
+        ObjectId _id
+        string version_name
+        string base_model
+        string dataset_path
+        string status
+        datetime start_time
+    }
+
+    AUDIT_LOGS {
+        ObjectId _id
+        string username
+        string action
+        string target_type
+        string target_id
+        datetime created_at
+    }
+
+    SYSTEM_CONFIG {
+        ObjectId _id
+        string key
+        object detection
+        object storage
+        object system
+        object advanced
+    }
+
+    CONTACTS {
+        ObjectId _id
+        int id
+        string name
+        string phone
+        string email
+    }
+
+    USERS ||--o| USER_PROFILES : has
+    USERS ||--o{ EMERGENCY_CONTACTS : owns
+    USERS ||--o{ USER_MESSAGES : receives
+    USERS ||--o{ AUDIT_LOGS : generates
+
+    DEVICES ||--o{ ALARMS : triggers
+    ALARMS ||--o| ALARM_WORKORDERS : forms
+    ALARMS ||--o{ ALARM_FEEDBACK : receives
+    ALARMS ||--o{ ALARM_SNAPSHOTS : captures
+    ALARMS ||--o{ NOTIFICATION_LOGS : creates
+    ALARMS ||--o{ HISTORY : produces
+
+    CONTACTS ||--o{ NOTIFICATION_LOGS : receives
+    SYSTEM_CONFIG ||--o{ ALARMS : constrains
+    MODEL_TRAINING_LOGS ||--o{ AUDIT_LOGS : records

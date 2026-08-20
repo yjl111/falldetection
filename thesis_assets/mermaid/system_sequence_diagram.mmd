@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    actor User as 用户
+    participant Frontend as 前端界面
+    participant Backend as 后端服务
+    participant Model as 检测模型
+    participant DB as MongoDB/GridFS
+
+    User ->> Frontend: 选择视频源并启动检测
+    Frontend ->> Backend: 发送检测请求
+    Backend ->> Model: 传入视频帧
+    Model -->> Backend: 返回检测结果
+
+    alt 检测到正常行为
+        Backend -->> Frontend: 返回检测结果
+        Frontend -->> User: 实时显示画面与目标框
+    else 检测到跌倒行为
+        Backend ->> DB: 写入报警记录
+        Backend ->> DB: 保存留证视频与截图
+        Backend -->> Frontend: 返回报警结果
+        Frontend -->> User: 显示报警提示
+    end
+
+    User ->> Frontend: 查看报警或历史回放
+    Frontend ->> Backend: 请求报警/历史数据
+    Backend ->> DB: 查询记录
+    DB -->> Backend: 返回结果
+    Backend -->> Frontend: 返回数据
+    Frontend -->> User: 展示记录与回放内容

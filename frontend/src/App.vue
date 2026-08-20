@@ -95,6 +95,10 @@ onMounted(() => {
     isLoggedIn.value = true;
     currentRole.value = localStorage.getItem('role') || 'user';
   }
+  const screenshotTab = localStorage.getItem('screenshot_tab');
+  if (screenshotTab) {
+    currentTab.value = screenshotTab;
+  }
 });
 
 const handleLoginSuccess = (payload) => {
